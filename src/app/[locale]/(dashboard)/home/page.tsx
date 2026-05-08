@@ -1,72 +1,144 @@
-'use client'
-
-import {
-  Eye, Heart, UserPlus, TrendingUp, PenTool, Calendar,
-  BarChart3, Sparkles, Clock, Plus
-} from 'lucide-react'
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { Eye, Heart, UserPlus, TrendingUp, PenTool, Calendar, BarChart3, Sparkles, Clock, Plus, FileText } from 'lucide-react'
 import Link from 'next/link'
+import { PILLARS } from '@/types'
 
-const kpiCards = [
-  { key: 'views', label: { en: 'Total Views', es: 'Vistas Totales', de: 'Gesamtansichten' }, value: '12.6K', change: '+8%', icon: Eye, color: 'text-blue-500' },
-  { key: 'engagement', label: { en: 'Engagement', es: 'Engagement', de: 'Engagement' }, value: '6.3%', change: '+1.2%', icon: Heart, color: 'text-rose-500' },
-  { key: 'followers', label: { en: 'New Followers', es: 'Nuevos Seguidores', de: 'Neue Follower' }, value: '111', change: '+23', icon: UserPlus, color: 'text-green-500' },
-  { key: 'reach', label: { en: 'Avg Reach', es: 'Alcance Prom.', de: 'Durchschn. Reichweite' }, value: '1.0K', change: '+5%', icon: TrendingUp, color: 'text-amber-500' },
-]
+export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-const quickActions = [
-  { key: 'create', label: { en: 'Create Content', es: 'Crear Contenido', de: 'Inhalt erstellen' }, icon: PenTool, href: '/create', color: 'bg-primary' },
-  { key: 'schedule', label: { en: 'Schedule Post', es: 'Programar Post', de: 'Beitrag planen' }, icon: Calendar, href: '/plan', color: 'bg-blue-500' },
-  { key: 'analytics', label: { en: 'View Analytics', es: 'Ver Analíticas', de: 'Analysen ansehen' }, icon: BarChart3, href: '/insights', color: 'bg-purple-500' },
-]
+  if (!user) redirect('/login')
 
-export default function HomePage() {
-  // TODO: Get language from store/UI context
-  const language = 'es' as 'es' | 'de' | 'en'
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .single()
+
+  const lang = (profile?.language || locale || 'es') as 'es' | 'de' | 'en'
+
+  // Fetch real content items
+  const { data: contentItems } = await supabase
+    .from('content_items')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  const { data: scheduledCount } = await supabase
+    .from('content_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('status', 'scheduled')
+
+  const { data: draftCount } = await supabase
+    .from('content_items')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('status', 'draft')
+
+  const t = (key: string) => {
+    const translations: Record<string, Record<string, string>> = {
+      greeting: { es: 'Buenos días', de: 'Guten Tag', en: 'Good morning' },
+      subtitle: { es: 'Aquí está tu resumen de la semana.', de: 'Hier ist deine Übersicht für diese Woche.', en: "Here's your overview for this week." },
+      quickActions: { es: 'Acciones Rápidas', de: 'Schnellstart', en: 'Quick Actions' },
+      createContent: { es: 'Crear Contenido', de: 'Inhalt erstellen', en: 'Create Content' },
+      schedulePost: { es: 'Programar Post', de: 'Beitrag planen', en: 'Schedule Post' },
+      viewInsights: { es: 'Ver Insights', de: 'Analysen ansehen', en: 'View Insights' },
+      upcomingPosts: { es: 'Próximas Publicaciones', de: 'Kommende Beiträge', en: 'Upcoming Posts' },
+      noScheduled: { es: 'No hay publicaciones programadas', de: 'Keine geplanten Beiträge', en: 'No scheduled posts' },
+      createFirst: { es: 'Crea tu primera publicación', de: 'Erstelle deinen ersten Beitrag', en: 'Create your first post' },
+      recentContent: { es: 'Contenido Reciente', de: 'Neueste Inhalte', en: 'Recent Content' },
+      drafts: { es: 'Borradores', de: 'Entwürfe', en: 'Drafts' },
+      scheduled: { es: 'Programados', de: 'Geplant', en: 'Scheduled' },
+      totalViews: { es: 'Vistas Totales', de: 'Gesamtansichten', en: 'Total Views' },
+      engagement: { es: 'Engagement', de: 'Engagement', en: 'Engagement' },
+    }
+    return translations[key]?.[lang] || key
+  }
+
+  const pillarLabel = (pillar: string) => {
+    const p = PILLARS[pillar as keyof typeof PILLARS]
+    return p ? `${p.emoji} ${p.name}` : pillar
+  }
+
+  const statusLabel = (status: string) => {
+    const map: Record<string, Record<string, string>> = {
+      draft: { es: 'Borrador', de: 'Entwurf', en: 'Draft' },
+      review: { es: 'Revisión', de: 'Review', en: 'Review' },
+      approved: { es: 'Aprobado', de: 'Genehmigt', en: 'Approved' },
+      scheduled: { es: 'Programado', de: 'Geplant', en: 'Scheduled' },
+      published: { es: 'Publicado', de: 'Veröffentlicht', en: 'Published' },
+    }
+    return map[status]?.[lang] || status
+  }
 
   return (
     <div className="space-y-8">
       {/* Greeting */}
       <div>
         <h1 className="font-display text-3xl lg:text-4xl font-bold">
-          {language === 'de' ? 'Guten Tag' : language === 'es' ? 'Buenos días' : 'Good morning'}, Nicola 👋
+          {t('greeting')}, {profile?.display_name || 'Nicola'} 👋
         </h1>
-        <p className="text-muted-foreground mt-1">
-          {language === 'de' ? 'Hier ist deine Übersicht für diese Woche.' : language === 'es' ? 'Aquí está tu resumen de la semana.' : "Here's your overview for this week."}
-        </p>
+        <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiCards.map((kpi, i) => (
-          <div key={kpi.key} className="bg-card border border-border rounded-2xl p-4 lg:p-5 hover:border-primary/30 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <kpi.icon size={18} className={kpi.color} />
-              <span className="text-xs font-mono text-green-600 font-bold">{kpi.change}</span>
-            </div>
-            <p className="text-2xl lg:text-3xl font-bold">{kpi.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{kpi.label[language]}</p>
+        <div className="bg-card border border-border rounded-2xl p-4 lg:p-5 hover:border-primary/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <FileText size={18} className="text-blue-500" />
           </div>
-        ))}
+          <p className="text-2xl lg:text-3xl font-bold">{draftCount?.length ?? 0}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('drafts')}</p>
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 lg:p-5 hover:border-primary/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <Calendar size={18} className="text-green-500" />
+          </div>
+          <p className="text-2xl lg:text-3xl font-bold">{scheduledCount?.length ?? 0}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('scheduled')}</p>
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 lg:p-5 hover:border-primary/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <Eye size={18} className="text-blue-500" />
+          </div>
+          <p className="text-2xl lg:text-3xl font-bold">—</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('totalViews')}</p>
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 lg:p-5 hover:border-primary/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <Heart size={18} className="text-rose-500" />
+          </div>
+          <p className="text-2xl lg:text-3xl font-bold">—</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('engagement')}</p>
+        </div>
       </div>
 
       {/* Quick Actions */}
       <div>
-        <h2 className="font-display text-lg font-bold mb-4">
-          {language === 'de' ? 'Schnellstart' : language === 'es' ? 'Acciones Rápidas' : 'Quick Actions'}
-        </h2>
+        <h2 className="font-display text-lg font-bold mb-4">{t('quickActions')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {quickActions.map((action) => (
-            <Link
-              key={action.key}
-              href={action.href}
-              className="group bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 transition-all"
-            >
-              <div className={`w-12 h-12 ${action.color} rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
-                <action.icon size={20} className="text-white" />
-              </div>
-              <p className="font-bold text-sm">{action.label[language]}</p>
-            </Link>
-          ))}
+          <Link href={`/${locale}/create`} className="group bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 transition-all">
+            <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <PenTool size={20} className="text-white" />
+            </div>
+            <p className="font-bold text-sm">{t('createContent')}</p>
+          </Link>
+          <Link href={`/${locale}/plan`} className="group bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 transition-all">
+            <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <Calendar size={20} className="text-white" />
+            </div>
+            <p className="font-bold text-sm">{t('schedulePost')}</p>
+          </Link>
+          <Link href={`/${locale}/insights`} className="group bg-card border border-border rounded-2xl p-5 text-left hover:border-primary/30 transition-all">
+            <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <BarChart3 size={20} className="text-white" />
+            </div>
+            <p className="font-bold text-sm">{t('viewInsights')}</p>
+          </Link>
         </div>
       </div>
 
@@ -79,9 +151,9 @@ export default function HomePage() {
           <div>
             <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">AI Insight</p>
             <p className="text-sm font-medium leading-relaxed">
-              {language === 'de'
+              {lang === 'de'
                 ? 'Deine beste Postzeit ist 20:00 Uhr. Beiträge über das Tal erleben 40% mehr Engagement. Versuche diese Woche einen Reel über Transformation zu erstellen.'
-                : language === 'es'
+                : lang === 'es'
                 ? 'Tu mejor horario para publicar es 8:00 PM. Los posts sobre la experiencia del valle tienen 40% más engagement. Intenta crear un Reel sobre transformación esta semana.'
                 : 'Your best posting time is 8 PM. Valley experience posts get 40% more engagement. Try creating a Reel about transformation this week.'}
             </p>
@@ -89,29 +161,43 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Upcoming Posts Placeholder */}
+      {/* Recent Content */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-lg font-bold">
-            {language === 'de' ? 'Kommende Beiträge' : language === 'es' ? 'Próximas Publicaciones' : 'Upcoming Posts'}
-          </h2>
+          <h2 className="font-display text-lg font-bold">{t('recentContent')}</h2>
         </div>
-        <div className="bg-card border border-border rounded-2xl p-8 text-center">
-          <Clock size={32} className="mx-auto text-muted-foreground/30 mb-3" />
-          <p className="text-sm font-bold text-muted-foreground">
-            {language === 'de' ? 'Keine geplanten Beiträge' : language === 'es' ? 'No hay publicaciones programadas' : 'No scheduled posts'}
-          </p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
-            {language === 'de' ? 'Erstelle deinen ersten Beitrag im Generator' : language === 'es' ? 'Crea tu primera publicación en el generador' : 'Create your first post in the generator'}
-          </p>
-          <Link
-            href="/create"
-            className="mt-4 inline-flex items-center gap-1.5 bg-primary text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-primary-dark transition-colors"
-          >
-            <Plus size={14} />
-            {language === 'de' ? 'Erstellen' : language === 'es' ? 'Crear' : 'Create'}
-          </Link>
-        </div>
+        {contentItems && contentItems.length > 0 ? (
+          <div className="space-y-3">
+            {contentItems.map((item: any) => (
+              <Link key={item.id} href={`/${locale}/create`} className="block bg-card border border-border rounded-xl p-4 hover:border-primary/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg">{PILLARS[item.pillar as keyof typeof PILLARS]?.emoji || '📝'}</span>
+                    <div>
+                      <p className="font-medium text-sm">{item.title || pillarLabel(item.pillar)}</p>
+                      <p className="text-xs text-muted-foreground">{pillarLabel(item.pillar)} · {item.type}</p>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                    item.status === 'published' ? 'bg-green-500/10 text-green-500' :
+                    item.status === 'scheduled' ? 'bg-blue-500/10 text-blue-500' :
+                    'bg-muted text-muted-foreground'
+                  }`}>{statusLabel(item.status)}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-2xl p-8 text-center">
+            <Clock size={32} className="mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-sm font-bold text-muted-foreground">{t('noScheduled')}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">{t('createFirst')}</p>
+            <Link href={`/${locale}/create`} className="mt-4 inline-flex items-center gap-1.5 bg-primary text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-primary/90 transition-colors">
+              <Plus size={14} />
+              {t('createContent')}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   )
