@@ -1,9 +1,10 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ContentGenerator } from '@/components/content/content-generator'
+import { AIContentStudio } from '@/components/ai/content-studio'
 import { HashtagGenerator } from '@/components/instagram/hashtag-generator'
 import { BestTimeToPost } from '@/components/instagram/best-time-to-post'
-import { PenTool, Hash, Clock } from 'lucide-react'
+import { PenTool, Sparkles, Hash, Clock } from 'lucide-react'
 import { PageTransition } from '@/components/ui/motion'
 
 export default async function CreatePage({
@@ -54,13 +55,27 @@ export default async function CreatePage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main: AI Content Generator */}
-        <div className="lg:col-span-2">
-          <ContentGenerator
-            userId={user.id}
-            language={language}
-            brandVoice={brandVoice}
-          />
+        {/* Main: AI Content Studio */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Content Studio (ideas, calendar, adapt) */}
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <AIContentStudio />
+          </div>
+
+          {/* Classic Content Generator */}
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles size={20} className="text-primary" />
+              <h2 className="font-bold">
+                {locale === 'de' ? 'Caption-Generator' : locale === 'es' ? 'Generador de Captions' : 'Caption Generator'}
+              </h2>
+            </div>
+            <ContentGenerator
+              userId={user.id}
+              language={language}
+              brandVoice={brandVoice}
+            />
+          </div>
         </div>
 
         {/* Sidebar: Hashtags + Best Time */}
