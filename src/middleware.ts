@@ -4,5 +4,6 @@ import { routing } from '@/i18n/routing'
 export default createMiddleware(routing)
 
 export const config = {
-  matcher: ['/', '/(de|es|en)/:path*'],
+  // Skip auth routes and API routes
+  matcher: ['/', '/(de|es|en)/:path*', '/((?!auth|api|login|_next|_vercel|.*\\..*).*)'],
 }
