@@ -1,7 +1,7 @@
-// Gemini AI integration for content generation
-// Uses server-side API calls to keep the key secure
+// OpenRouter AI integration for content generation
+// Uses free models via OpenRouter API
 
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 export interface GenerateContentParams {
   pillar: string
@@ -23,9 +23,9 @@ export interface GeneratedContent {
 }
 
 export async function generateContent(params: GenerateContentParams): Promise<GeneratedContent> {
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured')
+    throw new Error('OPENROUTER_API_KEY is not configured')
   }
 
   const langMap: Record<string, string> = { es: 'Spanish', de: 'German', en: 'English' }
@@ -60,44 +60,49 @@ Respond ONLY in this JSON format:
 
 Be authentic, avoid clichés, and make it feel like Nicola wrote it herself. Use emojis sparingly but effectively.`
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+  const response = await fetch(OPENROUTER_API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://nicola-hub-v3.vercel.app',
+      'X-Title': 'Nicola Schaefer Hub',
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.9,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 2048,
-        responseMimeType: 'application/json',
-      },
+      model: 'openrouter/free',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.9,
+      max_tokens: 2048,
     }),
   })
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`Gemini API error: ${response.status} - ${error}`)
+    throw new Error(`OpenRouter API error: ${response.status} - ${error}`)
   }
 
   const data = await response.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  const text = data.choices?.[0]?.message?.content
 
   if (!text) {
     throw new Error('No content generated')
   }
 
   try {
-    const parsed = JSON.parse(text)
-    return {
-      caption: parsed.caption || '',
-      hashtags: parsed.hashtags || [],
-      hook: parsed.hook || '',
-      cta: parsed.cta || '',
-      alternativeCaptions: parsed.alternativeCaptions || [],
+    // Try to extract JSON from the response (may be wrapped in markdown code blocks)
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0])
+      return {
+        caption: parsed.caption || '',
+        hashtags: parsed.hashtags || [],
+        hook: parsed.hook || '',
+        cta: parsed.cta || '',
+        alternativeCaptions: parsed.alternativeCaptions || [],
+      }
     }
+    throw new Error('No JSON found')
   } catch {
-    // If JSON parsing fails, return the raw text
     return {
       caption: text,
       hashtags: [],
