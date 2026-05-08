@@ -2,30 +2,32 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, PenTool, Calendar, BarChart3, MoreHorizontal } from 'lucide-react'
+import { Home, PenTool, Calendar, BarChart3, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores'
 
 const mobileNavItems = [
-  { id: 'home', label: { en: 'Home', es: 'Inicio', de: 'Start' }, icon: Home, href: '/' },
+  { id: 'home', label: { en: 'Home', es: 'Inicio', de: 'Start' }, icon: Home, href: '/home' },
   { id: 'create', label: { en: 'Create', es: 'Crear', de: 'Erstellen' }, icon: PenTool, href: '/create' },
   { id: 'plan', label: { en: 'Plan', es: 'Plan', de: 'Planen' }, icon: Calendar, href: '/plan' },
   { id: 'insights', label: { en: 'Insights', es: 'Insights', de: 'Insights' }, icon: BarChart3, href: '/insights' },
+  { id: 'assets', label: { en: 'Assets', es: 'Assets', de: 'Assets' }, icon: FolderOpen, href: '/assets' },
 ]
 
 export function MobileNav() {
   const pathname = usePathname()
   const { language } = useUIStore()
+  const locale = pathname?.split('/')[1] || 'es'
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border flex items-center justify-around py-2 px-4 z-50">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border flex items-center justify-around py-2 px-2 z-50">
       {mobileNavItems.map((item) => (
         <Link
           key={item.id}
-          href={item.href}
+          href={`/${locale}${item.href}`}
           className={cn(
-            'flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl transition-colors',
-            pathname === item.href
+            'flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-xl transition-colors',
+            pathname === `/${locale}${item.href}` || pathname === item.href
               ? 'text-primary'
               : 'text-muted-foreground'
           )}

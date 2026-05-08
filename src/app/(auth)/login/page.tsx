@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { Sparkles, Mail } from 'lucide-react'
+import { Sparkles, Mail, Lock } from 'lucide-react'
+import { handleMagicLink, handleLogin } from './actions'
 
 export default async function LoginPage({
   searchParams,
@@ -45,18 +46,21 @@ export default async function LoginPage({
 
         {/* Login Card */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-          {/* Magic Link (Email Link) */}
+          {/* Magic Link */}
           <form action={handleMagicLink} className="space-y-4">
             <div>
               <label htmlFor="email-magic" className="text-sm font-medium block mb-1.5">Email</label>
-              <input
-                id="email-magic"
-                name="email"
-                type="email"
-                required
-                placeholder="nicola@example.com"
-                className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-sm focus:border-primary focus:outline-none transition-colors"
-              />
+              <div className="relative">
+                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="email-magic"
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="nicola@example.com"
+                  className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-xl text-sm focus:border-primary focus:outline-none transition-colors"
+                />
+              </div>
             </div>
             <button
               type="submit"
@@ -91,14 +95,17 @@ export default async function LoginPage({
             </div>
             <div>
               <label htmlFor="password" className="text-sm font-medium block mb-1.5">Contraseña</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                required
-                placeholder="••••••••"
-                className="w-full px-4 py-2.5 bg-muted border border-border rounded-xl text-sm focus:border-primary focus:outline-none transition-colors"
-              />
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  className="w-full pl-10 pr-4 py-2.5 bg-muted border border-border rounded-xl text-sm focus:border-primary focus:outline-none transition-colors"
+                />
+              </div>
             </div>
             <button
               type="submit"
@@ -115,38 +122,4 @@ export default async function LoginPage({
       </div>
     </div>
   )
-}
-
-async function handleMagicLink(formData: FormData) {
-  'use server'
-  const email = formData.get('email') as string
-  const supabase = await createServerSupabaseClient()
-
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
-    },
-  })
-
-  if (error) {
-    redirect('/login?error=' + encodeURIComponent(error.message))
-  }
-
-  redirect('/login?message=check_email')
-}
-
-async function handleLogin(formData: FormData) {
-  'use server'
-  const email = formData.get('email') as string
-  const password = formData.get('password') as string
-  const supabase = await createServerSupabaseClient()
-
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-  if (error) {
-    redirect('/login?error=invalid_credentials')
-  }
-
-  redirect('/es/home')
 }
