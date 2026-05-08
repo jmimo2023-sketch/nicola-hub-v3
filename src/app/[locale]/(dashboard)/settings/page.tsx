@@ -9,11 +9,5 @@ export default async function SettingsPageRoute({ params }: { params: Promise<{ 
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
-
-  return <SettingsPage profile={profile} userId={user.id} locale={locale} />
+  return <SettingsPage />
 }

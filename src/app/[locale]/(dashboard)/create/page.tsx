@@ -1,7 +1,10 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { ContentGenerator } from '@/components/content/content-generator'
-import { PenTool } from 'lucide-react'
+import { HashtagGenerator } from '@/components/instagram/hashtag-generator'
+import { BestTimeToPost } from '@/components/instagram/best-time-to-post'
+import { PenTool, Hash, Clock } from 'lucide-react'
+import { PageTransition } from '@/components/ui/motion'
 
 export default async function CreatePage({
   params,
@@ -12,19 +15,19 @@ export default async function CreatePage({
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/login')
-  }
+  if (!user) redirect('/login')
 
-  let profile = null
-  if (user) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
-    profile = data
-  }
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .single()
+
+  const { data: igConnection } = await supabase
+    .from('meta_connections')
+    .select('ig_user_id, ig_username')
+    .eq('user_id', user.id)
+    .single()
 
   const language = profile?.language || locale || 'es'
   const brandVoice = profile?.brand_voice
@@ -32,9 +35,10 @@ export default async function CreatePage({
       ? profile.brand_voice
       : JSON.stringify(profile.brand_voice)
     : ''
+  const isConnected = !!igConnection
 
   return (
-    <div className="space-y-6">
+    <PageTransition className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold flex items-center gap-2">
           <PenTool size={24} className="text-primary" />
@@ -49,11 +53,26 @@ export default async function CreatePage({
         </p>
       </div>
 
-      <ContentGenerator
-        userId={user.id}
-        language={language}
-        brandVoice={brandVoice}
-      />
-    </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main: AI Content Generator */}
+        <div className="lg:col-span-2">
+          <ContentGenerator
+            userId={user.id}
+            language={language}
+            brandVoice={brandVoice}
+          />
+        </div>
+
+        {/* Sidebar: Hashtags + Best Time */}
+        <div className="space-y-6">
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <HashtagGenerator language={language} pillar="emotional_mastery" />
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <BestTimeToPost language={language} isConnected={isConnected} />
+          </div>
+        </div>
+      </div>
+    </PageTransition>
   )
 }
