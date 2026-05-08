@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Home, PenTool, Calendar, BarChart3, FolderOpen, Target,
-  Settings, Moon, Sun, Globe, LogOut
+  Settings, Moon, Sun, Globe, LogOut, Inbox
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores'
@@ -15,6 +15,7 @@ const navSections = [
   { id: 'create', label: { en: 'Create', es: 'Crear', de: 'Erstellen' }, icon: PenTool, href: '/create' },
   { id: 'plan', label: { en: 'Plan', es: 'Planificar', de: 'Planen' }, icon: Calendar, href: '/plan' },
   { id: 'insights', label: { en: 'Insights', es: 'Insights', de: 'Insights' }, icon: BarChart3, href: '/insights' },
+  { id: 'inbox', label: { en: 'Inbox', es: 'Bandeja', de: 'Posteingang' }, icon: Inbox, href: '/inbox' },
   { id: 'assets', label: { en: 'Assets', es: 'Assets', de: 'Assets' }, icon: FolderOpen, href: '/assets' },
   { id: 'campaigns', label: { en: 'Campaigns', es: 'Campañas', de: 'Kampagnen' }, icon: Target, href: '/campaigns' },
   { id: 'settings', label: { en: 'Settings', es: 'Ajustes', de: 'Einstellungen' }, icon: Settings, href: '/settings' },
