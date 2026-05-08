@@ -36,7 +36,7 @@ export default async function DashboardLayout({
   return (
     <AuthProvider>
       <DashboardShell user={user} igConnection={igConnection}>
-        <OnboardingGate onboardingCompleted={profile?.onboardingCompleted ?? false}>
+        <OnboardingGate userId={user.id} onboardingCompleted={profile?.onboardingCompleted ?? false}>
           {children}
         </OnboardingGate>
       </DashboardShell>

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useAuth } from '@/components/auth-provider'
 import { useUIStore } from '@/stores'
 import { PILLARS, type ContentPillar } from '@/types'
 import { Button } from '@/components/ui/button'
@@ -15,8 +14,12 @@ const languages = [
   { code: 'en' as const, label: 'English', flag: '🇬🇧' },
 ]
 
-export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
-  const { user, loading: authLoading } = useAuth()
+interface OnboardingWizardProps {
+  userId: string
+  onComplete: () => void
+}
+
+export function OnboardingWizard({ userId, onComplete }: OnboardingWizardProps) {
   const { language, setLanguage } = useUIStore()
   const [step, setStep] = useState(0)
   const [selectedPillars, setSelectedPillars] = useState<ContentPillar[]>([])
@@ -40,10 +43,8 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     setSaving(true)
     setError(null)
 
-    const userId = user?.id
     if (!userId) {
-      console.error('[Onboarding] No user ID available')
-      setError('No se pudo guardar: sesión no disponible. Intenta recargar la página.')
+      setError('Sesión no disponible. Recarga la página.')
       setSaving(false)
       return
     }
@@ -70,10 +71,9 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
       if (updateError) {
         console.warn('[Onboarding] Update failed, trying upsert:', updateError.message)
-        // If update fails (profile might not exist), try upsert
         const { error: upsertError } = await supabase.from('profiles').upsert({
           user_id: userId,
-          display_name: user?.email?.split('@')[0] || 'User',
+          display_name: 'User',
           language,
           onboarding_completed: true,
           brand_voice: brandVoiceData,
@@ -81,36 +81,22 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
         if (upsertError) {
           console.error('[Onboarding] Upsert also failed:', upsertError.message)
-          setError('Error al guardar. Intenta de nuevo.')
+          setError('Error al guardar: ' + upsertError.message)
           setSaving(false)
           return
         }
       }
 
       console.log('[Onboarding] Profile saved successfully')
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Onboarding] Unexpected error:', err)
-      setError('Error inesperado. Intenta de nuevo.')
+      setError('Error inesperado: ' + (err.message || 'Intenta de nuevo'))
       setSaving(false)
       return
     }
 
     setSaving(false)
     onComplete()
-  }
-
-  // Show loading while auth is hydrating
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-muted-foreground">
-            {language === 'de' ? 'Laden...' : language === 'es' ? 'Cargando...' : 'Loading...'}
-          </p>
-        </div>
-      </div>
-    )
   }
 
   return (
