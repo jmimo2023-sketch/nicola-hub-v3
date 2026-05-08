@@ -12,7 +12,7 @@ interface OnboardingGateProps {
 export function OnboardingGate({ profile, children }: OnboardingGateProps) {
   const [completed, setCompleted] = useState(false)
 
-  if (completed || profile?.onboarding_completed) {
+  if (completed || profile?.onboardingCompleted) {
     return <>{children}</>
   }
 

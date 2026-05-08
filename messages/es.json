@@ -1,0 +1,68 @@
+{
+  "common": {
+    "appName": "Nicola Schaefer Hub",
+    "loading": "Cargando...",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "create": "Crear",
+    "search": "Buscar",
+    "language": "Idioma"
+  },
+  "nav": {
+    "dashboard": "Panel",
+    "content": "Contenido",
+    "calendar": "Calendario",
+    "assets": "Recursos",
+    "campaigns": "Campañas",
+    "crm": "Comunidad",
+    "settings": "Ajustes"
+  },
+  "onboarding": {
+    "title": "Bienvenida a Nicola Schaefer Hub",
+    "subtitle": "Tu plataforma de inteligencia de contenido",
+    "step1Title": "Elige tu idioma",
+    "step2Title": "Tus pilares de contenido",
+    "step3Title": "Tu voz de marca",
+    "languageLabel": "Idioma preferido",
+    "pillarsLabel": "Selecciona tus pilares de contenido",
+    "brandVoiceLabel": "Describe tu voz de marca",
+    "brandVoicePlaceholder": "Ej: Cálida, inspiradora, auténtica...",
+    "next": "Siguiente",
+    "back": "Atrás",
+    "finish": "Comenzar"
+  },
+  "dashboard": {
+    "welcome": "Bienvenida, {name}",
+    "overview": "Resumen",
+    "recentContent": "Contenido reciente",
+    "upcomingPosts": "Próximas publicaciones",
+    "quickActions": "Acciones rápidas",
+    "newPost": "Nueva publicación",
+    "newStory": "Nueva historia",
+    "newReel": "Nueva reel"
+  },
+  "content": {
+    "title": "Contenido",
+    "newItem": "Nuevo contenido",
+    "draft": "Borrador",
+    "scheduled": "Programado",
+    "published": "Publicado",
+    "aiAssist": "Asistente IA"
+  },
+  "calendar": {
+    "title": "Calendario",
+    "month": "Mes",
+    "week": "Semana",
+    "day": "Día"
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "logout": "Cerrar sesión",
+    "loginWithGoogle": "Continuar con Google",
+    "loginWithEmail": "Continuar con email",
+    "email": "Correo electrónico",
+    "password": "Contraseña"
+  }
+}
