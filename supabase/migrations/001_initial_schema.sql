@@ -1,14 +1,14 @@
 -- Nicola Schaefer Hub v3 — Database Schema
 -- Run this in Supabase SQL Editor
 
--- Enable UUID extension
+-- Enable UUID extension (gen_random_uuid() is built-in in Postgres 14+, uuid-ossp as fallback)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================================
 -- PROFILES
 -- ============================================================================
 CREATE TABLE profiles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE NOT NULL,
   display_name TEXT,
   avatar_url TEXT,
@@ -23,7 +23,7 @@ CREATE TABLE profiles (
 -- CONTENT ITEMS
 -- ============================================================================
 CREATE TABLE content_items (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('post', 'reel', 'story', 'carousel', 'video')),
   pillar TEXT NOT NULL CHECK (pillar IN ('emotional_mastery', 'systematic_method', 'valley_experience', 'transformation', 'community')),
@@ -51,7 +51,7 @@ CREATE TABLE content_items (
 -- ASSETS
 -- ============================================================================
 CREATE TABLE assets (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL,
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('image', 'video', 'template', 'design')),
@@ -77,7 +77,7 @@ CREATE TABLE assets (
 -- CONTENT TEMPLATES
 -- ============================================================================
 CREATE TABLE content_templates (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id),
   name TEXT NOT NULL,
   pillar TEXT NOT NULL CHECK (pillar IN ('emotional_mastery', 'systematic_method', 'valley_experience', 'transformation', 'community')),
@@ -98,7 +98,7 @@ CREATE TABLE content_templates (
 -- CAMPAIGNS
 -- ============================================================================
 CREATE TABLE campaigns (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL,
   name TEXT NOT NULL,
   objective TEXT NOT NULL CHECK (objective IN ('engagement', 'followers', 'conversions', 'awareness')),
@@ -115,7 +115,7 @@ CREATE TABLE campaigns (
 -- CRM CONTACTS
 -- ============================================================================
 CREATE TABLE crm_contacts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL,
   first_name TEXT,
   last_name TEXT,
@@ -138,7 +138,7 @@ CREATE TABLE crm_contacts (
 -- META CONNECTIONS
 -- ============================================================================
 CREATE TABLE meta_connections (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL UNIQUE,
   access_token TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
@@ -155,7 +155,7 @@ CREATE TABLE meta_connections (
 -- ANALYTICS SNAPSHOTS
 -- ============================================================================
 CREATE TABLE analytics_snapshots (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) NOT NULL,
   date DATE NOT NULL,
   impressions INTEGER DEFAULT 0,
