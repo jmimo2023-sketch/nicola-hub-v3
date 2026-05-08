@@ -6,7 +6,7 @@ import { PILLARS, type ContentPillar } from '@/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Sparkles, ArrowRight, ArrowLeft, Check, Globe, Palette, AlertCircle } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { saveOnboarding } from '@/app/[locale]/(dashboard)/onboarding/actions'
 
 const languages = [
   { code: 'es' as const, label: 'Español', flag: '🇪🇸' },
@@ -50,47 +50,21 @@ export function OnboardingWizard({ userId, onComplete }: OnboardingWizardProps) 
     }
 
     try {
-      const supabase = createClient()
-
-      const brandVoiceData = {
+      const result = await saveOnboarding({
+        userId,
+        language,
         pillars: selectedPillars.length > 0 ? selectedPillars : ['emotional_mastery'],
         tone: brandTone,
-        emoji_style: 'moderate',
-        hashtag_strategy: 'mixed',
-        include_cta: true,
-        include_hook: true,
-        max_hashtags: 15,
+      })
+
+      if (result.error) {
+        setError('Error al guardar: ' + result.error)
+        setSaving(false)
+        return
       }
-
-      // Try update first
-      const { error: updateError } = await supabase.from('profiles').update({
-        language,
-        onboarding_completed: true,
-        brand_voice: brandVoiceData,
-      }).eq('user_id', userId)
-
-      if (updateError) {
-        console.warn('[Onboarding] Update failed, trying upsert:', updateError.message)
-        const { error: upsertError } = await supabase.from('profiles').upsert({
-          user_id: userId,
-          display_name: 'User',
-          language,
-          onboarding_completed: true,
-          brand_voice: brandVoiceData,
-        }, { onConflict: 'user_id' })
-
-        if (upsertError) {
-          console.error('[Onboarding] Upsert also failed:', upsertError.message)
-          setError('Error al guardar: ' + upsertError.message)
-          setSaving(false)
-          return
-        }
-      }
-
-      console.log('[Onboarding] Profile saved successfully')
     } catch (err: any) {
       console.error('[Onboarding] Unexpected error:', err)
-      setError('Error inesperado: ' + (err.message || 'Intenta de nuevo'))
+      setError('Error inesperado. Intenta de nuevo.')
       setSaving(false)
       return
     }
