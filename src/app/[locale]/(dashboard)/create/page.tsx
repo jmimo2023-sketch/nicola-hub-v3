@@ -1,21 +1,59 @@
-export default function CreatePage() {
+import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { ContentGenerator } from '@/components/content/content-generator'
+import { PenTool } from 'lucide-react'
+
+export default async function CreatePage({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}) {
+  const { locale } = await params
+  const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  let profile = null
+  if (user) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', user.id)
+      .single()
+    profile = data
+  }
+
+  const language = profile?.language || locale || 'es'
+  const brandVoice = profile?.brand_voice
+    ? typeof profile.brand_voice === 'string'
+      ? profile.brand_voice
+      : JSON.stringify(profile.brand_voice)
+    : ''
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl font-bold">Create Content</h1>
-        <p className="text-muted-foreground mt-1">Generate, design, and edit content with AI</p>
-      </div>
-      
-      {/* AI Generator — coming next sprint */}
-      <div className="bg-card border border-border rounded-2xl p-8 text-center">
-        <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <span className="text-3xl">✨</span>
-        </div>
-        <h2 className="font-display text-xl font-bold mb-2">AI Content Generator</h2>
-        <p className="text-muted-foreground text-sm max-w-md mx-auto">
-          Generate captions, hashtags, and complete content with your brand voice. Coming in Sprint 2.
+        <h1 className="font-display text-2xl font-bold flex items-center gap-2">
+          <PenTool size={24} className="text-primary" />
+          {locale === 'de' ? 'Inhalt erstellen' : locale === 'es' ? 'Crear Contenido' : 'Create Content'}
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          {locale === 'de'
+            ? 'Generiere Inhalte mit KI in deiner Markenstimme'
+            : locale === 'es'
+            ? 'Genera contenido con IA en tu voz de marca'
+            : 'Generate content with AI in your brand voice'}
         </p>
       </div>
+
+      <ContentGenerator
+        userId={user.id}
+        language={language}
+        brandVoice={brandVoice}
+      />
     </div>
   )
 }
