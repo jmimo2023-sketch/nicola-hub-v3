@@ -6,6 +6,7 @@ import { HashtagGenerator } from '@/components/instagram/hashtag-generator'
 import { BestTimeToPost } from '@/components/instagram/best-time-to-post'
 import { PenTool, Sparkles, Hash, Clock } from 'lucide-react'
 import { PageTransition } from '@/components/ui/motion'
+import { transformProfile, transformMetaConnection, type ProfileRow, type MetaConnectionRow } from '@/lib/data/transforms'
 
 export default async function CreatePage({
   params,
@@ -18,23 +19,26 @@ export default async function CreatePage({
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profileRow } = await supabase
     .from('profiles')
     .select('*')
     .eq('user_id', user.id)
     .single()
 
-  const { data: igConnection } = await supabase
+  const { data: metaRow } = await supabase
     .from('meta_connections')
     .select('ig_user_id, ig_username')
     .eq('user_id', user.id)
     .single()
 
+  const profile = transformProfile(profileRow as ProfileRow | null)
+  const igConnection = transformMetaConnection(metaRow as MetaConnectionRow | null)
+
   const language = profile?.language || locale || 'es'
-  const brandVoice = profile?.brand_voice
-    ? typeof profile.brand_voice === 'string'
-      ? profile.brand_voice
-      : JSON.stringify(profile.brand_voice)
+  const brandVoice = profile?.brandVoice
+    ? typeof profile.brandVoice === 'string'
+      ? profile.brandVoice
+      : JSON.stringify(profile.brandVoice)
     : ''
   const isConnected = !!igConnection
 

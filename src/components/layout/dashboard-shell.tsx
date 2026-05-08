@@ -6,10 +6,11 @@ import { MobileNav } from './mobile-nav'
 
 interface DashboardShellProps {
   user: any
+  igConnection?: any
   children: React.ReactNode
 }
 
-export function DashboardShell({ user, children }: DashboardShellProps) {
+export function DashboardShell({ user, igConnection, children }: DashboardShellProps) {
   return (
     <div className="flex h-dvh bg-background">
       {/* Desktop Sidebar */}

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Eye, Heart, UserPlus, TrendingUp, PenTool, Calendar, BarChart3, Sparkles, Clock, Plus, FileText } from 'lucide-react'
 import Link from 'next/link'
 import { PILLARS } from '@/types'
+import { transformProfile, type ProfileRow } from '@/lib/data/transforms'
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
@@ -11,11 +12,13 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  const { data: profileRow } = await supabase
     .from('profiles')
     .select('*')
     .eq('user_id', user.id)
     .single()
+
+  const profile = transformProfile(profileRow as ProfileRow | null)
 
   const lang = (profile?.language || locale || 'es') as 'es' | 'de' | 'en'
 
@@ -80,7 +83,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
       {/* Greeting */}
       <div>
         <h1 className="font-display text-3xl lg:text-4xl font-bold">
-          {t('greeting')}, {profile?.display_name || 'Nicola'} 👋
+          {t('greeting')}, {profile?.displayName || 'Nicola'} 👋 👋
         </h1>
         <p className="text-muted-foreground mt-1">{t('subtitle')}</p>
       </div>

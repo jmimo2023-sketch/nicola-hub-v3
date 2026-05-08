@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { transformProfile, type Profile, type ProfileRow } from '@/lib/data/transforms'
 import type { User } from '@supabase/supabase-js'
-import type { Profile } from '@/types'
 
 interface AuthContextType {
   user: User | null
@@ -13,6 +13,7 @@ interface AuthContextType {
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
   signInWithEmail: async () => ({ error: null }),
   signUpWithEmail: async () => ({ error: null }),
   signOut: async () => {},
+  refreshProfile: async () => {},
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -31,26 +33,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
+  async function fetchProfile(userId: string): Promise<Profile | null> {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+    return transformProfile(data as ProfileRow | null)
+  }
+
+  async function ensureProfile(authUser: User) {
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('user_id', authUser.id)
+      .single()
+
+    if (!existing) {
+      await supabase.from('profiles').insert({
+        user_id: authUser.id,
+        display_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+        language: 'es',
+        onboarding_completed: false,
+      })
+    }
+
+    const p = await fetchProfile(authUser.id)
+    setProfile(p)
+    setLoading(false)
+  }
+
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       setUser(user)
       if (user) {
-        fetchProfile(user.id)
+        await ensureProfile(user)
       } else {
         setLoading(false)
       }
     })
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setUser(session?.user ?? null)
         if (session?.user) {
-          await fetchProfile(session.user.id)
-          // Create profile on first sign in
           if (event === 'SIGNED_IN') {
             await ensureProfile(session.user)
+          } else {
+            const p = await fetchProfile(session.user.id)
+            setProfile(p)
+            setLoading(false)
           }
         } else {
           setProfile(null)
@@ -61,34 +93,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [])
-
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-    
-    setProfile(data as Profile | null)
-    setLoading(false)
-  }
-
-  async function ensureProfile(user: User) {
-    const { data: existing } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!existing) {
-      await supabase.from('profiles').insert({
-        user_id: user.id,
-        display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-        language: 'es',
-        onboarding_completed: false,
-      })
-    }
-  }
 
   async function signInWithGoogle() {
     const { error } = await supabase.auth.signInWithOAuth({
@@ -131,6 +135,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithEmail,
       signUpWithEmail,
       signOut,
+      refreshProfile: async () => {
+        if (user) {
+          const p = await fetchProfile(user.id)
+          setProfile(p)
+        }
+      },
     }}>
       {children}
     </AuthContext.Provider>

@@ -2,17 +2,16 @@
 
 import { useState } from 'react'
 import { OnboardingWizard } from './onboarding/onboarding-wizard'
-import type { Profile } from '@/types'
 
 interface OnboardingGateProps {
-  profile: Profile | null
+  onboardingCompleted: boolean
   children?: React.ReactNode
 }
 
-export function OnboardingGate({ profile, children }: OnboardingGateProps) {
+export function OnboardingGate({ onboardingCompleted, children }: OnboardingGateProps) {
   const [completed, setCompleted] = useState(false)
 
-  if (completed || profile?.onboardingCompleted) {
+  if (completed || onboardingCompleted) {
     return <>{children}</>
   }
 
