@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, PenTool, Calendar, BarChart3, Inbox } from 'lucide-react'
+import { Home, PenTool, Calendar, BarChart3, Inbox, Ear } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores'
 
@@ -10,7 +10,7 @@ const mobileNavItems = [
   { id: 'home', label: { en: 'Home', es: 'Inicio', de: 'Start' }, icon: Home, href: '/home' },
   { id: 'create', label: { en: 'Create', es: 'Crear', de: 'Erstellen' }, icon: PenTool, href: '/create' },
   { id: 'inbox', label: { en: 'Inbox', es: 'Bandeja', de: 'Inbox' }, icon: Inbox, href: '/inbox' },
-  { id: 'plan', label: { en: 'Plan', es: 'Plan', de: 'Planen' }, icon: Calendar, href: '/plan' },
+  { id: 'listening', label: { en: 'Listen', es: 'Escucha', de: 'Listen' }, icon: Ear, href: '/listening' },
   { id: 'insights', label: { en: 'Insights', es: 'Insights', de: 'Insights' }, icon: BarChart3, href: '/insights' },
 ]
 
