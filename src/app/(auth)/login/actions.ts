@@ -26,12 +26,18 @@ export async function handleLogin(formData: FormData) {
   const password = formData.get('password') as string
   const supabase = await createServerSupabaseClient()
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     redirect('/login?error=invalid_credentials')
   }
 
+  if (!data.user) {
+    redirect('/login?error=invalid_credentials')
+  }
+
+  // redirect() is fine here — Supabase sets cookies via setAll()
+  // which Next.js picks up before throwing the redirect response
   redirect('/es/home')
 }
 
@@ -41,7 +47,7 @@ export async function handleSignUp(formData: FormData) {
   const displayName = formData.get('displayName') as string
   const supabase = await createServerSupabaseClient()
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -53,13 +59,11 @@ export async function handleSignUp(formData: FormData) {
     redirect('/login?mode=signup&error=' + encodeURIComponent(error.message))
   }
 
-  // Auto-confirm for development — in production, user would need to confirm email
-  // Try to sign in immediately
-  const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-
-  if (signInError) {
+  // If email confirmation is required, redirect to login with message
+  if (data.user && !data.session) {
     redirect('/login?message=account_created')
   }
 
+  // Auto-confirmed — redirect to home
   redirect('/es/home')
 }
