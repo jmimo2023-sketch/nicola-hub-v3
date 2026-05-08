@@ -40,7 +40,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
     setSaving(true)
     try {
       const supabase = createClient()
-      await supabase.from('profiles').update({
+      const { error } = await supabase.from('profiles').update({
         language,
         onboarding_completed: true,
         brand_voice: {
@@ -53,6 +53,26 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           max_hashtags: 15,
         },
       }).eq('user_id', user?.id)
+
+      if (error) {
+        // If profile doesn't exist yet, try upsert
+        const { error: upsertError } = await supabase.from('profiles').upsert({
+          user_id: user?.id,
+          display_name: user?.email?.split('@')[0] || 'User',
+          language,
+          onboarding_completed: true,
+          brand_voice: {
+            pillars: selectedPillars,
+            tone: brandTone,
+            emoji_style: 'moderate',
+            hashtag_strategy: 'mixed',
+            include_cta: true,
+            include_hook: true,
+            max_hashtags: 15,
+          },
+        }, { onConflict: 'user_id' })
+        if (upsertError) throw upsertError
+      }
     } catch (err) {
       console.error('Failed to save onboarding:', err)
     }
