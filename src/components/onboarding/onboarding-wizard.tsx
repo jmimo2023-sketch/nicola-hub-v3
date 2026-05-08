@@ -5,9 +5,8 @@ import { useAuth } from '@/components/auth-provider'
 import { useUIStore } from '@/stores'
 import { PILLARS, type ContentPillar } from '@/types'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { Sparkles, ArrowRight, ArrowLeft, Check, Globe, Palette } from 'lucide-react'
+import { Sparkles, ArrowRight, ArrowLeft, Check, Globe, Palette, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 const languages = [
@@ -17,12 +16,13 @@ const languages = [
 ]
 
 export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { language, setLanguage } = useUIStore()
   const [step, setStep] = useState(0)
   const [selectedPillars, setSelectedPillars] = useState<ContentPillar[]>([])
   const [brandTone, setBrandTone] = useState<string>('vulnerable')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const totalSteps = 3
 
@@ -38,46 +38,79 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
 
   const handleComplete = async () => {
     setSaving(true)
+    setError(null)
+
+    const userId = user?.id
+    if (!userId) {
+      console.error('[Onboarding] No user ID available')
+      setError('No se pudo guardar: sesión no disponible. Intenta recargar la página.')
+      setSaving(false)
+      return
+    }
+
     try {
       const supabase = createClient()
-      const { error } = await supabase.from('profiles').update({
+
+      const brandVoiceData = {
+        pillars: selectedPillars.length > 0 ? selectedPillars : ['emotional_mastery'],
+        tone: brandTone,
+        emoji_style: 'moderate',
+        hashtag_strategy: 'mixed',
+        include_cta: true,
+        include_hook: true,
+        max_hashtags: 15,
+      }
+
+      // Try update first
+      const { error: updateError } = await supabase.from('profiles').update({
         language,
         onboarding_completed: true,
-        brand_voice: {
-          pillars: selectedPillars,
-          tone: brandTone,
-          emoji_style: 'moderate',
-          hashtag_strategy: 'mixed',
-          include_cta: true,
-          include_hook: true,
-          max_hashtags: 15,
-        },
-      }).eq('user_id', user?.id)
+        brand_voice: brandVoiceData,
+      }).eq('user_id', userId)
 
-      if (error) {
-        // If profile doesn't exist yet, try upsert
+      if (updateError) {
+        console.warn('[Onboarding] Update failed, trying upsert:', updateError.message)
+        // If update fails (profile might not exist), try upsert
         const { error: upsertError } = await supabase.from('profiles').upsert({
-          user_id: user?.id,
+          user_id: userId,
           display_name: user?.email?.split('@')[0] || 'User',
           language,
           onboarding_completed: true,
-          brand_voice: {
-            pillars: selectedPillars,
-            tone: brandTone,
-            emoji_style: 'moderate',
-            hashtag_strategy: 'mixed',
-            include_cta: true,
-            include_hook: true,
-            max_hashtags: 15,
-          },
+          brand_voice: brandVoiceData,
         }, { onConflict: 'user_id' })
-        if (upsertError) throw upsertError
+
+        if (upsertError) {
+          console.error('[Onboarding] Upsert also failed:', upsertError.message)
+          setError('Error al guardar. Intenta de nuevo.')
+          setSaving(false)
+          return
+        }
       }
+
+      console.log('[Onboarding] Profile saved successfully')
     } catch (err) {
-      console.error('Failed to save onboarding:', err)
+      console.error('[Onboarding] Unexpected error:', err)
+      setError('Error inesperado. Intenta de nuevo.')
+      setSaving(false)
+      return
     }
+
     setSaving(false)
     onComplete()
+  }
+
+  // Show loading while auth is hydrating
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">
+            {language === 'de' ? 'Laden...' : language === 'es' ? 'Cargando...' : 'Loading...'}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -95,6 +128,14 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
             />
           ))}
         </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-500 flex items-center gap-2">
+            <AlertCircle size={16} />
+            {error}
+          </div>
+        )}
 
         {/* Step 0: Language */}
         {step === 0 && (
@@ -217,7 +258,7 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
         {/* Navigation */}
         <div className="flex items-center justify-between mt-8">
           {step > 0 ? (
-            <Button variant="outline" onClick={() => setStep(step - 1)}>
+            <Button variant="outline" onClick={() => setStep(step - 1)} disabled={saving}>
               <ArrowLeft size={16} className="mr-2" />
               {language === 'de' ? 'Zurück' : language === 'es' ? 'Atrás' : 'Back'}
             </Button>
@@ -236,11 +277,11 @@ export function OnboardingWizard({ onComplete }: { onComplete: () => void }) {
           ) : (
             <Button 
               onClick={handleComplete}
-              disabled={saving || !brandTone}
+              disabled={saving}
             >
               {saving 
                 ? (language === 'de' ? 'Speichern...' : language === 'es' ? 'Guardando...' : 'Saving...')
-                : (language === 'de' ? 'Los geht\'s!' : language === 'es' ? '¡Empezar!' : 'Let\'s go!')
+                : (language === 'de' ? "Los geht's!" : language === 'es' ? '¡Empezar!' : "Let's go!")
               }
               {!saving && <Sparkles size={16} className="ml-2" />}
             </Button>
