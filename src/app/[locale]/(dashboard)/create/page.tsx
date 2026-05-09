@@ -4,7 +4,8 @@ import { ContentGenerator } from '@/components/content/content-generator'
 import { AIContentStudio } from '@/components/ai/content-studio'
 import { HashtagGenerator } from '@/components/instagram/hashtag-generator'
 import { BestTimeToPost } from '@/components/instagram/best-time-to-post'
-import { PenTool, Sparkles, Hash, Clock } from 'lucide-react'
+import { VideoStudio } from '@/components/video/video-studio'
+import { PenTool, Sparkles, Hash, Clock, Film } from 'lucide-react'
 import { PageTransition } from '@/components/ui/motion'
 import { transformProfile, transformMetaConnection, type ProfileRow, type MetaConnectionRow } from '@/lib/data/transforms'
 
@@ -64,6 +65,20 @@ export default async function CreatePage({
           {/* Content Studio (ideas, calendar, adapt) */}
           <div className="bg-card border border-border rounded-2xl p-5">
             <AIContentStudio />
+          </div>
+
+          {/* Video Studio */}
+          <div className="bg-card border border-border rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Film size={20} className="text-primary" />
+              <h2 className="font-bold">
+                {locale === 'de' ? 'Video Studio' : locale === 'es' ? 'Video Studio' : 'Video Studio'}
+              </h2>
+              <span className="text-xs text-muted-foreground">
+                {locale === 'de' ? 'KI-gestützter Videoschnitt' : locale === 'es' ? 'Edición de video con IA' : 'AI-powered video editing'}
+              </span>
+            </div>
+            <VideoStudio />
           </div>
 
           {/* Classic Content Generator */}
