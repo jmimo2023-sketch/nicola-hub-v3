@@ -188,6 +188,68 @@ export interface Profile {
   updatedAt: string
 }
 
+// ── Publishing Queue ──────────────────────────────────────────────────────
+
+export type QueueStatus = 'pending' | 'publishing' | 'published' | 'failed' | 'cancelled'
+
+export interface PublishingQueueItem {
+  id: string
+  userId: string
+  contentItemId: string
+  status: QueueStatus
+  scheduledAt: string
+  publishedAt: string | null
+  failureReason: string | null
+  attempts: number
+  maxAttempts: number
+  igContainerId: string | null
+  igPermalink: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// ── Workflow ──────────────────────────────────────────────────────────────
+
+export type WorkflowTrigger = 'manual' | 'scheduled' | 'milestone' | 'event'
+export type WorkflowExecutionStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+
+export interface Workflow {
+  id: string
+  userId: string
+  name: string
+  description: string | null
+  triggerType: WorkflowTrigger
+  triggerConfig: Record<string, unknown>
+  steps: WorkflowStep[]
+  isActive: boolean
+  isTemplate: boolean
+  lastRunAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkflowStep {
+  id: string
+  type: 'generate_ideas' | 'create_draft' | 'review' | 'approve' | 'schedule' | 'publish' | 'analyze' | 'notify'
+  config: Record<string, unknown>
+}
+
+// ── Notification ──────────────────────────────────────────────────────
+
+export type NotificationType = 'publish_success' | 'publish_failed' | 'comment' | 'milestone' | 'reminder' | 'insight' | 'system'
+
+export interface Notification {
+  id: string
+  userId: string
+  type: NotificationType
+  title: string
+  message: string | null
+  data: Record<string, unknown>
+  read: boolean
+  actionUrl: string | null
+  createdAt: string
+}
+
 // ── Navigation ──────────────────────────────────────────────────────────────
 
 export type NavSection = 'home' | 'create' | 'plan' | 'insights' | 'assets' | 'campaigns' | 'settings'

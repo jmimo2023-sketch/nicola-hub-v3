@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Home, PenTool, Calendar, BarChart3, FolderOpen, Target,
-  Settings, Moon, Sun, Globe, LogOut, Inbox, Ear
+  Settings, Moon, Sun, Globe, LogOut, Inbox, Ear, Zap, Image
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores'
@@ -17,8 +17,8 @@ const navSections = [
   { id: 'insights', label: { en: 'Insights', es: 'Insights', de: 'Insights' }, icon: BarChart3, href: '/insights' },
   { id: 'inbox', label: { en: 'Inbox', es: 'Bandeja', de: 'Posteingang' }, icon: Inbox, href: '/inbox' },
   { id: 'listening', label: { en: 'Listening', es: 'Escucha', de: 'Listening' }, icon: Ear, href: '/listening' },
-  { id: 'assets', label: { en: 'Assets', es: 'Assets', de: 'Assets' }, icon: FolderOpen, href: '/assets' },
-  { id: 'campaigns', label: { en: 'Campaigns', es: 'Campañas', de: 'Kampagnen' }, icon: Target, href: '/campaigns' },
+  { id: 'assets', label: { en: 'Media', es: 'Media', de: 'Media' }, icon: Image, href: '/assets' },
+  { id: 'campaigns', label: { en: 'Workflows', es: 'Flujos', de: 'Workflows' }, icon: Zap, href: '/campaigns' },
   { id: 'settings', label: { en: 'Settings', es: 'Ajustes', de: 'Einstellungen' }, icon: Settings, href: '/settings' },
 ]
 
@@ -44,21 +44,24 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 space-y-1">
-        {navSections.map((section) => (
-          <Link
-            key={section.id}
-            href={`/${locale}${section.href}`}
-            className={cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
-              pathname === `/${locale}${section.href}` || pathname === section.href
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <section.icon size={18} />
-            <span>{section.label[language]}</span>
-          </Link>
-        ))}
+        {navSections.map((section) => {
+          const isActive = pathname === `/${locale}${section.href}` || pathname?.endsWith(section.href)
+          return (
+            <Link
+              key={section.id}
+              href={`/${locale}${section.href}`}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
+                isActive
+                  ? 'bg-primary/10 text-primary shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
+            >
+              <section.icon size={18} />
+              <span>{section.label[language]}</span>
+            </Link>
+          )
+        })}
       </nav>
 
       <div className="p-3 border-t border-border space-y-2">
