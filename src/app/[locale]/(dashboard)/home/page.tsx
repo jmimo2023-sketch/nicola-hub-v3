@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { HomeDashboard } from '@/components/home/home-dashboard'
+import { getInstagramConnection } from '@/lib/instagram/auth'
 
 export default async function HomePage() {
   const supabase = await createServerSupabaseClient()
@@ -29,6 +30,19 @@ export default async function HomePage() {
     .eq('user_id', user.id)
     .single()
 
+  // Check Instagram connection and fetch real analytics
+  let igConnection = null
+  let igAnalytics = null
+  try {
+    igConnection = await getInstagramConnection(user.id)
+    if (igConnection && !igConnection.isExpired) {
+      const { getAccountAnalytics } = await import('@/lib/instagram/analytics')
+      igAnalytics = await getAccountAnalytics(user.id)
+    }
+  } catch (e) {
+    console.error('Failed to fetch Instagram data:', e)
+  }
+
   const stats = {
     total: contentItems?.length || 0,
     drafts: contentItems?.filter(c => c.status === 'draft').length || 0,
@@ -48,6 +62,8 @@ export default async function HomePage() {
       contentItems={contentItems || []}
       analytics={analytics || []}
       profile={profile}
+      igConnection={igConnection}
+      igAnalytics={igAnalytics}
     />
   )
 }

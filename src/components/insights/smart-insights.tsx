@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { PILLARS, type ContentPillar } from '@/types'
+import { InstagramIcon } from '@/components/ui/instagram-icon'
 import {
   BarChart3, TrendingUp, Users, Eye, Heart, MessageCircle,
   Share2, Bookmark, Sparkles, ArrowUpRight, ArrowDownRight, RefreshCw
@@ -33,9 +34,9 @@ interface InsightData {
   optimalPostCount: { min: number; max: number; current: number }
 }
 
-// ── Mock chart data ──────────────────────────────────────────────────────────
+// ── Mock chart data (fallback when Instagram not connected) ──────────────────
 
-const engagementData = [
+const mockEngagementData = [
   { date: 'Lun', likes: 45, comments: 12, shares: 8, saves: 15, reach: 1200 },
   { date: 'Mar', likes: 62, comments: 18, shares: 12, saves: 22, reach: 1800 },
   { date: 'Mié', likes: 38, comments: 9, shares: 6, saves: 11, reach: 950 },
@@ -53,7 +54,7 @@ const pillarData = Object.entries(PILLARS).map(([key, pillar]) => ({
 
 const COLORS = Object.values(PILLARS).map(p => p.color)
 
-const topPosts = [
+const mockTopPosts = [
   { title: 'Vulnerabilidad como fortaleza', type: 'post', likes: 156, comments: 42, reach: 4200, engagement: 4.7 },
   { title: '5 Pasos para transformar tu vida', type: 'carousel', likes: 134, comments: 38, reach: 3800, engagement: 4.5 },
   { title: 'Mi historia de valle', type: 'reel', likes: 210, comments: 51, reach: 5200, engagement: 5.0 },
@@ -63,7 +64,54 @@ const topPosts = [
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function SmartInsights() {
+interface RealAnalytics {
+  current: {
+    accounts_engaged: number
+    reach: number
+    likes: number
+    comments: number
+    shares: number
+    saves: number
+    replies: number
+    reposts: number
+    followers: number
+    engagement_rate: number
+  }
+  previous: {
+    accounts_engaged: number
+    reach: number
+    likes: number
+    comments: number
+    shares: number
+    saves: number
+    replies: number
+    reposts: number
+    followers: number
+    engagement_rate: number
+  }
+  timeseries: Array<{ date: string; reach: number; followers: number; engagement_rate: number }>
+  topPosts: Array<{
+    id: string
+    caption: string
+    media_type: string
+    media_url: string
+    permalink: string
+    timestamp: string
+    like_count: number
+    comments_count: number
+    reach: number
+    engagement_rate: number
+    saves: number
+    shares: number
+  }>
+}
+
+interface SmartInsightsProps {
+  igConnected?: boolean
+  realAnalytics?: RealAnalytics | null
+}
+
+export function SmartInsights({ igConnected = false, realAnalytics = null }: SmartInsightsProps) {
   const [insightData, setInsightData] = useState<InsightData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -84,7 +132,81 @@ export function SmartInsights() {
     loadInsights()
   }, [])
 
-  const healthScore = insightData?.contentHealthScore ?? 0
+  // Derive data: use real analytics when connected, mock as fallback
+  const useRealData = igConnected && realAnalytics
+
+  // Engagement chart data
+  const engagementData = useRealData && realAnalytics!.timeseries.length > 0
+    ? realAnalytics!.timeseries.map(t => ({
+        date: new Date(t.date).toLocaleDateString('es-ES', { weekday: 'short' }),
+        reach: t.reach,
+        likes: 0, // timeseries doesn't break down by type, reach is the main metric
+        comments: 0,
+        shares: 0,
+        saves: 0,
+      }))
+    : mockEngagementData
+
+  // Quick stats - use real data when available
+  const quickStats = useRealData
+    ? [
+        {
+          label: 'Alcance semanal',
+          value: realAnalytics!.current.reach >= 1000 ? `${(realAnalytics!.current.reach / 1000).toFixed(1)}K` : String(realAnalytics!.current.reach),
+          change: realAnalytics!.previous.reach > 0
+            ? `${realAnalytics!.current.reach >= realAnalytics!.previous.reach ? '+' : ''}${((realAnalytics!.current.reach - realAnalytics!.previous.reach) / realAnalytics!.previous.reach * 100).toFixed(0)}%`
+            : 'N/A',
+          up: realAnalytics!.current.reach >= realAnalytics!.previous.reach,
+          icon: Eye,
+        },
+        {
+          label: 'Engagement rate',
+          value: `${realAnalytics!.current.engagement_rate.toFixed(1)}%`,
+          change: realAnalytics!.previous.engagement_rate > 0
+            ? `${realAnalytics!.current.engagement_rate >= realAnalytics!.previous.engagement_rate ? '+' : ''}${((realAnalytics!.current.engagement_rate - realAnalytics!.previous.engagement_rate)).toFixed(1)}%`
+            : 'N/A',
+          up: realAnalytics!.current.engagement_rate >= realAnalytics!.previous.engagement_rate,
+          icon: Heart,
+        },
+        {
+          label: 'Seguidores',
+          value: realAnalytics!.current.followers >= 1000 ? `${(realAnalytics!.current.followers / 1000).toFixed(1)}K` : String(realAnalytics!.current.followers),
+          change: realAnalytics!.previous.followers > 0
+            ? `${realAnalytics!.current.followers >= realAnalytics!.previous.followers ? '+' : ''}${(realAnalytics!.current.followers - realAnalytics!.previous.followers)}`
+            : 'N/A',
+          up: realAnalytics!.current.followers >= realAnalytics!.previous.followers,
+          icon: Users,
+        },
+        {
+          label: 'Guardados',
+          value: String(realAnalytics!.current.saves),
+          change: realAnalytics!.previous.saves > 0
+            ? `${realAnalytics!.current.saves >= realAnalytics!.previous.saves ? '+' : ''}${((realAnalytics!.current.saves - realAnalytics!.previous.saves) / realAnalytics!.previous.saves * 100).toFixed(0)}%`
+            : 'N/A',
+          up: realAnalytics!.current.saves >= realAnalytics!.previous.saves,
+          icon: Bookmark,
+        },
+      ]
+    : [
+        { label: 'Alcance semanal', value: '12.5K', change: '+18%', up: true, icon: Eye },
+        { label: 'Engagement rate', value: '4.8%', change: '+0.5%', up: true, icon: Heart },
+        { label: 'Nuevos seguidores', value: '+243', change: '+12%', up: true, icon: Users },
+        { label: 'Guardados', value: '141', change: '+32%', up: true, icon: Bookmark },
+      ]
+
+  // Top posts - use real data when available
+  const topPosts = useRealData && realAnalytics!.topPosts.length > 0
+    ? realAnalytics!.topPosts.map(p => ({
+        title: p.caption || 'Sin título',
+        type: p.media_type === 'CAROUSEL_ALBUM' ? 'carousel' : p.media_type === 'REEL' ? 'reel' : p.media_type === 'STORY' ? 'story' : 'post',
+        likes: p.like_count,
+        comments: p.comments_count,
+        reach: p.reach,
+        engagement: p.engagement_rate,
+      }))
+    : mockTopPosts
+
+  const healthScore = insightData?.contentHealthScore ?? (useRealData ? Math.round(realAnalytics!.current.engagement_rate * 20) : 0)
   const insights = insightData?.insights ?? []
   const weeklyRec = insightData?.weeklyRecommendation ?? ''
   const postCount = insightData?.optimalPostCount ?? { min: 3, max: 5, current: 0 }
@@ -107,6 +229,22 @@ export function SmartInsights() {
         </Button>
       </div>
 
+      {/* Instagram Connection Banner */}
+      {!igConnected && (
+        <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <InstagramIcon size={20} className="text-yellow-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium">Conecta Instagram para ver datos reales</p>
+              <p className="text-xs text-muted-foreground">Los datos que ves ahora son de ejemplo. Conecta tu cuenta para ver estadísticas reales.</p>
+            </div>
+            <a href="/settings">
+              <Button variant="outline" size="sm" className="gap-1">Conectar Instagram</Button>
+            </a>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Health Score + Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {/* Health Score */}
@@ -126,12 +264,7 @@ export function SmartInsights() {
         </Card>
 
         {/* Quick Stats */}
-        {[
-          { label: 'Alcance semanal', value: '12.5K', change: '+18%', up: true, icon: Eye },
-          { label: 'Engagement rate', value: '4.8%', change: '+0.5%', up: true, icon: Heart },
-          { label: 'Nuevos seguidores', value: '+243', change: '+12%', up: true, icon: Users },
-          { label: 'Guardados', value: '141', change: '+32%', up: true, icon: Bookmark },
-        ].map(({ label, value, change, up, icon: Icon }) => (
+        {quickStats.map(({ label, value, change, up, icon: Icon }) => (
           <Card key={label}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">

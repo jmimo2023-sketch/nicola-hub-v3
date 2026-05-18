@@ -8,9 +8,59 @@ import { cn } from '@/lib/utils'
 import { FadeIn } from '@/components/ui/motion'
 import {
   Sparkles, Calendar, TrendingUp, AlertCircle, CheckCircle2,
-  Lightbulb, ArrowRight, BarChart3, FileText, Clock, Target
+  Lightbulb, ArrowRight, BarChart3, FileText, Clock, Target,
+  Users, ImageIcon, ExternalLink
 } from 'lucide-react'
+import { InstagramIcon } from '@/components/ui/instagram-icon'
 import type { AdvisorInsight } from '@/lib/ai/advisor-engine'
+
+interface IgConnection {
+  ig_user_id?: string
+  ig_username?: string
+  ig_followers_count?: number
+  ig_media_count?: number
+  access_token?: string
+  isExpired?: boolean
+  needsRefresh?: boolean
+}
+
+interface IgAnalytics {
+  current: {
+    accounts_engaged: number
+    reach: number
+    likes: number
+    comments: number
+    shares: number
+    saves: number
+    followers: number
+    engagement_rate: number
+  }
+  previous: {
+    accounts_engaged: number
+    reach: number
+    likes: number
+    comments: number
+    shares: number
+    saves: number
+    followers: number
+    engagement_rate: number
+  }
+  timeseries: Array<{ date: string; reach: number; followers: number; engagement_rate: number }>
+  topPosts: Array<{
+    id: string
+    caption: string
+    media_type: string
+    media_url: string
+    permalink: string
+    timestamp: string
+    like_count: number
+    comments_count: number
+    reach: number
+    engagement_rate: number
+    saves: number
+    shares: number
+  }>
+}
 
 interface HomeDashboardProps {
   stats: {
@@ -23,9 +73,11 @@ interface HomeDashboardProps {
   contentItems: any[]
   analytics: any[]
   profile: any
+  igConnection: IgConnection | null
+  igAnalytics: IgAnalytics | null
 }
 
-export function HomeDashboard({ stats, contentItems, analytics, profile }: HomeDashboardProps) {
+export function HomeDashboard({ stats, contentItems, analytics, profile, igConnection, igAnalytics }: HomeDashboardProps) {
   const [insights, setInsights] = useState<AdvisorInsight[]>([])
   const [healthScore, setHealthScore] = useState<number | null>(null)
   const [weeklyRec, setWeeklyRec] = useState<string>('')
@@ -72,6 +124,71 @@ export function HomeDashboard({ stats, contentItems, analytics, profile }: HomeD
 
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
+      {/* Instagram Connection Status */}
+      {igConnection ? (
+        <FadeIn>
+          <Card className={cn(
+            'border',
+            igConnection.isExpired
+              ? 'border-red-200 bg-red-50 dark:bg-red-950/30'
+              : 'border-green-200 bg-green-50 dark:bg-green-950/30'
+          )}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 flex items-center justify-center">
+                    <InstagramIcon size={20} className="text-white" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm">@{igConnection.ig_username || 'instagram'}</span>
+                      {igConnection.isExpired ? (
+                        <Badge variant="outline" className="text-red-600 border-red-300 text-[10px]">Token expirado</Badge>
+                      ) : igConnection.needsRefresh ? (
+                        <Badge variant="outline" className="text-yellow-600 border-yellow-300 text-[10px]">Token por expirar</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">Conectado</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span className="flex items-center gap-1"><Users size={12} /> {(igConnection.ig_followers_count || 0).toLocaleString()} seguidores</span>
+                      <span className="flex items-center gap-1"><ImageIcon size={12} /> {igConnection.ig_media_count || 0} publicaciones</span>
+                      {igAnalytics && (
+                        <span className="flex items-center gap-1"><TrendingUp size={12} /> {igAnalytics.current.engagement_rate.toFixed(1)}% engagement</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <a href="/settings" className="text-xs text-primary hover:underline flex items-center gap-1">
+                  Ajustes <ExternalLink size={12} />
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        </FadeIn>
+      ) : (
+        <FadeIn>
+          <Card className="border-dashed border-2 border-muted-foreground/20 bg-muted/30">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 flex items-center justify-center">
+                  <InstagramIcon size={20} className="text-white" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-semibold text-sm">Conecta tu Instagram</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">Vé tus estadísticas reales, comentarios y programa publicaciones</p>
+                </div>
+                <a href="/settings">
+                  <Button size="sm" className="gap-1">
+                    <InstagramIcon size={14} /> Conectar
+                  </Button>
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        </FadeIn>
+      )}
+
       {/* Greeting & Health Score */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>

@@ -12,6 +12,7 @@ import {
   List, Plus, Clock, Sparkles, LayoutGrid
 } from 'lucide-react'
 import { FadeIn } from '@/components/ui/motion'
+import { InstagramIcon } from '@/components/ui/instagram-icon'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -172,7 +173,11 @@ function QueueItem({ item }: { item: CalendarContent }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export function ContentCalendar() {
+interface ContentCalendarProps {
+  igConnected?: boolean
+}
+
+export function ContentCalendar({ igConnected = false }: ContentCalendarProps) {
   const t = useTranslations()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<'month' | 'week' | 'list'>('month')
@@ -246,6 +251,15 @@ export function ContentCalendar() {
           <p className="text-sm text-muted-foreground mt-1">
             Planifica, programa y visualiza tu contenido
           </p>
+          {igConnected ? (
+            <Badge variant="outline" className="mt-1 text-[10px] text-green-600 border-green-300 flex items-center gap-1 w-fit">
+              <InstagramIcon size={10} className="text-green-600" /> Instagram conectado — puedes publicar directamente
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="mt-1 text-[10px] text-muted-foreground flex items-center gap-1 w-fit">
+              <InstagramIcon size={10} /> Instagram no conectado
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
