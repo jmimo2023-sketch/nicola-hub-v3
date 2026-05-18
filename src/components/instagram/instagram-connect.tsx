@@ -60,7 +60,9 @@ export function InstagramConnect({ userId }: { userId: string }) {
         const needsRefresh = !isExpired && expiresAt < sevenDaysFromNow
         setConnection({ ...data, isExpired, needsRefresh })
       }
-    } catch {}
+    } catch (err) {
+      console.error('[InstagramConnect] checkConnection error:', err)
+    }
     setLoading(false)
   }
 
@@ -78,9 +80,11 @@ export function InstagramConnect({ userId }: { userId: string }) {
       if (data.url) {
         window.location.href = data.url
       } else {
+        console.error('[InstagramConnect] auth-url error:', data)
         setError(data.error || 'Error generando URL de autenticación')
       }
     } catch (err: any) {
+      console.error('[InstagramConnect] handleConnect error:', err)
       setError(err.message)
     }
     setConnecting(false)
