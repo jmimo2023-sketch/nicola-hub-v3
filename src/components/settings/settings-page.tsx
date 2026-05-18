@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Save, Globe, Palette, LogOut, Check } from 'lucide-react'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
 import { FadeIn, StaggerContainer, StaggerItem } from '@/components/ui/motion'
+import { ConnectionCardSkeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import type { ContentPillar } from '@/types'
 import { PILLARS } from '@/types'
 
@@ -58,9 +60,11 @@ export function SettingsPage() {
         .eq('user_id', user?.id)
 
       setSaved(true)
+      toast.success(l.saved)
       setTimeout(() => setSaved(false), 2000)
     } catch (err) {
       console.error(err)
+      toast.error('Error al guardar ajustes')
     }
     setSaving(false)
   }

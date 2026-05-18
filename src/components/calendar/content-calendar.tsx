@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
 import { FadeIn } from '@/components/ui/motion'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
 import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -154,8 +155,9 @@ function CalendarDayCell({
 
 // ── Queue Item ──────────────────────────────────────────────────────────────
 
-function QueueItem({ item }: { item: CalendarContent }) {
+function QueueItem({ item, igConnected, onPublish }: { item: CalendarContent; igConnected?: boolean; onPublish?: (item: CalendarContent) => void }) {
   const config = STATUS_CONFIG[item.status] || STATUS_CONFIG.draft
+  const canPublish = igConnected && (item.status === 'approved' || item.status === 'scheduled')
   return (
     <div className={cn('flex items-center gap-3 p-3 rounded-xl border border-border/50', config.bg)}>
       <span className="text-lg">{TYPE_ICONS[item.type] || '📄'}</span>
@@ -165,9 +167,16 @@ function QueueItem({ item }: { item: CalendarContent }) {
           {PILLAR_EMOJIS[item.pillar] || '📌'} {item.scheduledTime || 'Sin hora'}
         </div>
       </div>
-      <Badge variant="outline" className={cn('text-[10px]', config.color)}>
-        {config.label}
-      </Badge>
+      <div className="flex items-center gap-2">
+        {canPublish && onPublish && (
+          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => onPublish(item)}>
+            Publicar
+          </Button>
+        )}
+        <Badge variant="outline" className={cn('text-[10px]', config.color)}>
+          {config.label}
+        </Badge>
+      </div>
     </div>
   )
 }
@@ -261,6 +270,28 @@ export function ContentCalendar() {
     setCurrentDate(new Date(year, month + delta, 1))
   }
 
+  const handlePublish = async (item: CalendarContent) => {
+    if (!igConnected) {
+      toast.error('Conecta Instagram para publicar')
+      return
+    }
+    toast.promise(
+      fetch('/api/scheduling/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentItemId: item.id }),
+      }).then(async (res) => {
+        if (!res.ok) throw new Error('Error al publicar')
+        return res.json()
+      }),
+      {
+        loading: `Publicando "${item.title}"...`,
+        success: `"${item.title}" publicado exitosamente`,
+        error: 'Error al publicar. Intenta de nuevo.',
+      }
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -315,7 +346,7 @@ export function ContentCalendar() {
             </TabsTrigger>
           </TabsList>
 
-          <Button size="sm" className="gap-1">
+          <Button size="sm" className="gap-1" onClick={() => toast.info('Redirigiendo al creador de contenido...')}>
             <Plus size={14} /> Nuevo Post
           </Button>
         </div>
@@ -373,7 +404,7 @@ export function ContentCalendar() {
                     </div>
                     {dayContent.length > 0 ? (
                       dayContent.map(item => (
-                        <QueueItem key={item.id} item={item} />
+                        <QueueItem key={item.id} item={item} igConnected={igConnected} onPublish={handlePublish} />
                       ))
                     ) : (
                       <div className="text-xs text-center text-muted-foreground py-4 border border-dashed border-border/50 rounded-lg">
@@ -402,7 +433,7 @@ export function ContentCalendar() {
             {scheduledItems.length > 0 ? (
               <div className="space-y-2">
                 {scheduledItems.map(item => (
-                  <QueueItem key={item.id} item={item} />
+                  <QueueItem key={item.id} item={item} igConnected={igConnected} onPublish={handlePublish} />
                 ))}
               </div>
             ) : (

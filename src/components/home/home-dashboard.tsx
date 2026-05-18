@@ -1,81 +1,181 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useCallback } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { FadeIn } from '@/components/ui/motion'
+import { ConnectionCardSkeleton, StatsRowSkeleton, CardSkeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import {
   Sparkles, Calendar, TrendingUp, AlertCircle, CheckCircle2,
   Lightbulb, ArrowRight, BarChart3, FileText, Clock, Target,
-  Users, ImageIcon, ExternalLink, RefreshCw
+  Users, ImageIcon, ExternalLink, RefreshCw, AlertTriangle
 } from 'lucide-react'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
 import type { AdvisorInsight } from '@/lib/ai/advisor-engine'
 
 interface IgConnection {
-  ig_user_id?: string
-  ig_username?: string
-  ig_followers_count?: number
-  ig_media_count?: number
-  isExpired?: boolean
+  connected: boolean
+  expired?: boolean
+  username?: string
+  igUserId?: string
+  followersCount?: number
+  mediaCount?: number
 }
 
-interface HomeDashboardProps {
-  stats: {
-    total: number
-    drafts: number
-    scheduled: number
-    published: number
-    thisWeek: number
-  }
-  contentItems: any[]
-  analytics: any[]
-  profile: any
-  igConnection: IgConnection | null
+interface ContentStats {
+  total: number
+  drafts: number
+  scheduled: number
+  published: number
+  thisWeek: number
 }
 
-export function HomeDashboard({ stats, contentItems, analytics, profile, igConnection }: HomeDashboardProps) {
+interface Profile {
+  displayName: string | null
+  language: string
+  brandVoice: Record<string, unknown>
+}
+
+export function HomeDashboard() {
+  const [igConnection, setIgConnection] = useState<IgConnection | null>(null)
+  const [igConnectionLoading, setIgConnectionLoading] = useState(true)
+  const [stats, setStats] = useState<ContentStats>({ total: 0, drafts: 0, scheduled: 0, published: 0, thisWeek: 0 })
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [insights, setInsights] = useState<AdvisorInsight[]>([])
+  const [insightsLoading, setInsightsLoading] = useState(true)
   const [healthScore, setHealthScore] = useState<number | null>(null)
   const [weeklyRec, setWeeklyRec] = useState<string>('')
-  const [loading, setLoading] = useState(true)
   const [igEngagement, setIgEngagement] = useState<number | null>(null)
   const [igEngagementLoading, setIgEngagementLoading] = useState(false)
 
-  useEffect(() => {
-    async function loadInsights() {
-      try {
-        const res = await fetch('/api/insights/recommendations')
-        if (res.ok) {
-          const data = await res.json()
-          setInsights(data.insights || [])
-          setHealthScore(data.contentHealthScore ?? null)
-          setWeeklyRec(data.weeklyRecommendation || '')
-        }
-      } catch (e) {
-        console.error('[Home] Failed to load insights:', e)
-      } finally {
-        setLoading(false)
+  // Load IG connection
+  const loadIgConnection = useCallback(async () => {
+    setIgConnectionLoading(true)
+    try {
+      const res = await fetch('/api/instagram/connection')
+      if (res.ok) {
+        const data = await res.json()
+        setIgConnection(data)
+      } else {
+        setIgConnection({ connected: false })
       }
+    } catch (e) {
+      console.error('[Home] Failed to load IG connection:', e)
+      setIgConnection({ connected: false })
+    } finally {
+      setIgConnectionLoading(false)
     }
-    loadInsights()
   }, [])
 
-  // Load real engagement rate separately (non-blocking)
-  useEffect(() => {
-    if (igConnection && !igConnection.isExpired) {
-      setIgEngagementLoading(true)
-      fetch('/api/instagram/analytics')
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-          if (data?.current) setIgEngagement(data.current.engagement_rate)
+  // Load content stats from Supabase client-side
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: contentItems } = await supabase
+        .from('content_items')
+        .select('id, status, created_at')
+        .eq('user_id', user.id)
+
+      if (contentItems) {
+        const weekAgo = new Date()
+        weekAgo.setDate(weekAgo.getDate() - 7)
+        setStats({
+          total: contentItems.length,
+          drafts: contentItems.filter(c => c.status === 'draft').length,
+          scheduled: contentItems.filter(c => c.status === 'scheduled').length,
+          published: contentItems.filter(c => c.status === 'published').length,
+          thisWeek: contentItems.filter(c => new Date(c.created_at) >= weekAgo).length,
         })
-        .catch(() => {})
-        .finally(() => setIgEngagementLoading(false))
+      }
+    } catch (e) {
+      console.error('[Home] Failed to load stats:', e)
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
+
+  // Load profile
+  const loadProfile = useCallback(async () => {
+    try {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('display_name, language, brand_voice')
+        .eq('user_id', user.id)
+        .single()
+
+      if (data) {
+        setProfile({
+          displayName: data.display_name,
+          language: data.language || 'es',
+          brandVoice: data.brand_voice || {},
+        })
+      }
+    } catch (e) {
+      console.error('[Home] Failed to load profile:', e)
+    }
+  }, [])
+
+  // Load AI insights
+  const loadInsights = useCallback(async () => {
+    setInsightsLoading(true)
+    try {
+      const res = await fetch('/api/insights/recommendations')
+      if (res.ok) {
+        const data = await res.json()
+        setInsights(data.insights || [])
+        setHealthScore(data.contentHealthScore ?? null)
+        setWeeklyRec(data.weeklyRecommendation || '')
+      }
+    } catch (e) {
+      console.error('[Home] Failed to load insights:', e)
+    } finally {
+      setInsightsLoading(false)
+    }
+  }, [])
+
+  // Load real engagement rate (non-blocking)
+  const loadEngagement = useCallback(async () => {
+    if (!igConnection?.connected || igConnection?.expired) return
+    setIgEngagementLoading(true)
+    try {
+      const res = await fetch('/api/instagram/analytics')
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.current) setIgEngagement(data.current.engagement_rate)
+      }
+    } catch (e) {
+      // Silently fail — engagement is a nice-to-have
+    } finally {
+      setIgEngagementLoading(false)
     }
   }, [igConnection])
+
+  useEffect(() => {
+    loadIgConnection()
+    loadStats()
+    loadProfile()
+    loadInsights()
+  }, [loadIgConnection, loadStats, loadProfile, loadInsights])
+
+  useEffect(() => {
+    if (igConnection?.connected && !igConnection?.expired) {
+      loadEngagement()
+    }
+  }, [igConnection, loadEngagement])
 
   const insightIcon = (type: string) => {
     switch (type) {
@@ -100,14 +200,11 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
       {/* Instagram Connection Status */}
-      {igConnection ? (
+      {igConnectionLoading ? (
+        <ConnectionCardSkeleton />
+      ) : igConnection?.connected && !igConnection.expired ? (
         <FadeIn>
-          <Card className={cn(
-            'border',
-            igConnection.isExpired
-              ? 'border-red-200 bg-red-50 dark:bg-red-950/30'
-              : 'border-green-200 bg-green-50 dark:bg-green-950/30'
-          )}>
+          <Card className="border-green-200 bg-green-50 dark:bg-green-950/30">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -116,16 +213,12 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">@{igConnection.ig_username || 'instagram'}</span>
-                      {igConnection.isExpired ? (
-                        <Badge variant="outline" className="text-red-600 border-red-300 text-[10px]">Token expirado</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">Conectado</Badge>
-                      )}
+                      <span className="font-semibold text-sm">@{igConnection.username || 'instagram'}</span>
+                      <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">Conectado</Badge>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-                      <span className="flex items-center gap-1"><Users size={12} /> {(igConnection.ig_followers_count || 0).toLocaleString()} seguidores</span>
-                      <span className="flex items-center gap-1"><ImageIcon size={12} /> {igConnection.ig_media_count || 0} publicaciones</span>
+                      <span className="flex items-center gap-1"><Users size={12} /> {(igConnection.followersCount || 0).toLocaleString()} seguidores</span>
+                      <span className="flex items-center gap-1"><ImageIcon size={12} /> {igConnection.mediaCount || 0} publicaciones</span>
                       {igEngagementLoading ? (
                         <RefreshCw size={12} className="animate-spin" />
                       ) : igEngagement !== null ? (
@@ -136,6 +229,30 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
                 </div>
                 <a href="/settings" className="text-xs text-primary hover:underline flex items-center gap-1">
                   Ajustes <ExternalLink size={12} />
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        </FadeIn>
+      ) : igConnection?.expired ? (
+        <FadeIn>
+          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/30">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 flex items-center justify-center">
+                  <InstagramIcon size={20} className="text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">@{igConnection.username || 'instagram'}</span>
+                    <Badge variant="outline" className="text-amber-600 border-amber-300 text-[10px]">Token expirado</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Reconecta para seguir viendo estadísticas</p>
+                </div>
+                <a href="/settings">
+                  <Button size="sm" variant="outline" className="gap-1">
+                    <AlertTriangle size={14} /> Reconectar
+                  </Button>
                 </a>
               </div>
             </CardContent>
@@ -168,14 +285,14 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-display font-bold">
-            ¡Hola, {profile?.display_name || 'Nicola'}! 👋
+            ¡Hola, {profile?.displayName || 'Nicola'}! 👋
           </h1>
           <p className="text-muted-foreground mt-1">
             Tu asistente de contenido inteligente
           </p>
         </div>
 
-        {healthScore !== null && (
+        {healthScore !== null && !insightsLoading && (
           <FadeIn className="flex items-center gap-3">
             <div className="text-center">
               <div className={cn(
@@ -193,27 +310,31 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: 'Total Contenido', value: stats.total, icon: FileText, color: 'text-blue-500' },
-          { label: 'Borradores', value: stats.drafts, icon: FileText, color: 'text-yellow-500' },
-          { label: 'Programados', value: stats.scheduled, icon: Calendar, color: 'text-purple-500' },
-          { label: 'Publicados', value: stats.published, icon: CheckCircle2, color: 'text-green-500' },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <Card key={label} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4 flex items-center gap-3">
-              <Icon size={20} className={color} />
-              <div>
-                <div className="text-2xl font-bold">{value}</div>
-                <div className="text-xs text-muted-foreground">{label}</div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {statsLoading ? (
+        <StatsRowSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Total Contenido', value: stats.total, icon: FileText, color: 'text-blue-500' },
+            { label: 'Borradores', value: stats.drafts, icon: FileText, color: 'text-yellow-500' },
+            { label: 'Programados', value: stats.scheduled, icon: Calendar, color: 'text-purple-500' },
+            { label: 'Publicados', value: stats.published, icon: CheckCircle2, color: 'text-green-500' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <Card key={label} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4 flex items-center gap-3">
+                <Icon size={20} className={color} />
+                <div>
+                  <div className="text-2xl font-bold">{value}</div>
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Weekly Recommendation */}
-      {weeklyRec && (
+      {weeklyRec && !insightsLoading && (
         <FadeIn delay={0.1}>
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="p-4 flex items-start gap-3">
@@ -234,10 +355,10 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
           Insights Inteligentes
         </h2>
 
-        {loading ? (
+        {insightsLoading ? (
           <div className="grid gap-3 md:grid-cols-2">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />
+              <CardSkeleton key={i} className="h-24" />
             ))}
           </div>
         ) : insights.length > 0 ? (

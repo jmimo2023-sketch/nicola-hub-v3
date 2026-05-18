@@ -10,6 +10,8 @@ import {
 } from 'lucide-react'
 import { FadeIn, StaggerContainer, StaggerItem } from '@/components/ui/motion'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
+import { InboxSkeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 
 interface InboxItem {
   id: string
@@ -186,8 +188,10 @@ export function InboxPage() {
       setItems((prev) =>
         prev.map((i) => (i.id === selectedItem.id ? { ...i, is_replied: true } : i))
       )
+      toast.success(selectedItem.type === 'comment' ? 'Respuesta enviada' : 'Mensaje enviado')
     } catch (err: any) {
       setError(err.message)
+      toast.error('Error al enviar respuesta')
     }
     setSending(false)
   }
@@ -262,9 +266,8 @@ export function InboxPage() {
         {/* Message list */}
         <div className="lg:col-span-1 space-y-1">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <RefreshCw size={24} className="animate-spin mx-auto mb-2" />
-              <p className="text-sm">Cargando...</p>
+            <div className="space-y-2">
+              <InboxSkeleton />
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-8">

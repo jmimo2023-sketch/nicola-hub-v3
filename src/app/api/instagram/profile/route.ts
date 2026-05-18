@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getAccountInsights } from '@/lib/instagram/client'
+import { getProfile } from '@/lib/instagram/client'
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,9 +8,8 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const days = parseInt(request.nextUrl.searchParams.get('days') || '30')
-    const analytics = await getAccountInsights(user.id, days)
-    return NextResponse.json(analytics)
+    const profile = await getProfile(user.id)
+    return NextResponse.json(profile)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
     const status = (err as { statusCode?: number })?.statusCode || 500

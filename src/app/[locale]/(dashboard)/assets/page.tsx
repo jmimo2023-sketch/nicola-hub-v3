@@ -1,4 +1,10 @@
 import { MediaStudio } from '@/components/media/media-studio'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Assets',
+  description: 'Gestiona tus medios y recursos visuales para Instagram',
+}
 
 export default function AssetsPage() {
   return (

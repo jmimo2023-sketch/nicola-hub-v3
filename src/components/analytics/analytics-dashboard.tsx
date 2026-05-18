@@ -9,9 +9,9 @@ import {
   Share2, Bookmark, BarChart3, Loader2, Plus, X, ExternalLink
 } from 'lucide-react'
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart, Pie, Cell
-} from 'recharts'
+  LazyAreaChart, LazyResponsiveContainer,
+  Area, XAxis, YAxis, CartesianGrid, Tooltip
+} from '@/components/ui/lazy-charts'
 import { FadeIn, StaggerContainer, StaggerItem } from '@/components/ui/motion'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
 
@@ -224,8 +224,8 @@ export function AnalyticsDashboard() {
               <h3 className="font-bold">{l.growth}</h3>
               <BarChart3 size={18} className="text-muted-foreground" />
             </div>
-            <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={timeseries}>
+            <LazyResponsiveContainer width="100%" height={250}>
+              <LazyAreaChart data={timeseries}>
                 <defs>
                   <linearGradient id="colorReach" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#467a49" stopOpacity={0.3} />
@@ -239,8 +239,8 @@ export function AnalyticsDashboard() {
                   contentStyle={{ background: 'var(--color-card)', border: '1px solid var(--color-border)', borderRadius: 12, fontSize: 12 }}
                 />
                 <Area type="monotone" dataKey="reach" stroke="#467a49" fill="url(#colorReach)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+              </LazyAreaChart>
+            </LazyResponsiveContainer>
           </div>
         </FadeIn>
       )}

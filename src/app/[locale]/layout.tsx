@@ -1,6 +1,7 @@
 import { NextIntlClientProvider } from 'next-intl'
 import { getMessages } from 'next-intl/server'
 import { Inter, Playfair_Display } from 'next/font/google'
+import { Toaster } from 'sonner'
 import type { Metadata } from 'next'
 import '../globals.css'
 
@@ -17,14 +18,25 @@ const playfair = Playfair_Display({
 })
 
 export const metadata: Metadata = {
-  title: 'Nicola Schaefer Hub — Content Intelligence Platform',
-  description: 'AI-powered content creation, scheduling, and analytics for Instagram creators',
+  title: { default: 'Nicola Hub — Content Intelligence Platform', template: '%s | Nicola Hub' },
+  description: 'AI-powered content creation, scheduling, and analytics for Instagram creators — Publica, programa y analiza tus contenidos',
   keywords: ['instagram', 'content creation', 'AI', 'scheduling', 'analytics', 'coaching', 'yoga', 'spirituality'],
   authors: [{ name: 'Nicola Schaefer' }],
   openGraph: {
-    title: 'Nicola Schaefer Hub',
+    title: 'Nicola Hub',
     description: 'Content Intelligence Platform for Instagram Creators',
     type: 'website',
+    siteName: 'Nicola Hub',
+    locale: 'es_ES',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Nicola Hub — Content Intelligence Platform',
+    description: 'AI-powered content creation, scheduling, and analytics for Instagram creators',
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 
@@ -43,6 +55,7 @@ export default async function LocaleLayout({
       <body className={`${inter.variable} ${playfair.variable} font-sans antialiased`}>
         <NextIntlClientProvider messages={messages}>
           {children}
+          <Toaster position="bottom-right" richColors closeButton />
         </NextIntlClientProvider>
       </body>
     </html>

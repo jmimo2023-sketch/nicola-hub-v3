@@ -2,6 +2,12 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { InboxPage } from '@/components/inbox/inbox-page'
 import { PageTransition } from '@/components/ui/motion'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Bandeja de Entrada',
+  description: 'Gestiona tus mensajes y notificaciones de Instagram',
+}
 
 export default async function InboxRoute({
   params,

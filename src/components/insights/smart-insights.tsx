@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -8,14 +9,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { PILLARS, type ContentPillar } from '@/types'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
+import { StatsRowSkeleton, ChartSkeleton, CardSkeleton, ConnectionCardSkeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import {
   BarChart3, TrendingUp, Users, Eye, Heart, MessageCircle,
   Share2, Bookmark, Sparkles, ArrowUpRight, ArrowDownRight, RefreshCw
 } from 'lucide-react'
-import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
-  BarChart, Bar, PieChart, Pie, Cell, Legend
-} from 'recharts'
+import { FadeIn } from '@/components/ui/motion'
+
+// Lazy load Recharts to avoid SSR issues and reduce initial bundle
+const LazyRecharts = dynamic(() => import('./recharts-charts'), { ssr: false })
 
 interface InsightData {
   contentHealthScore: number
@@ -52,8 +55,6 @@ const pillarData = Object.entries(PILLARS).map(([key, pillar]) => ({
   color: pillar.color,
 }))
 
-const COLORS = Object.values(PILLARS).map(p => p.color)
-
 const mockTopPosts = [
   { title: 'Vulnerabilidad como fortaleza', type: 'post', likes: 156, comments: 42, reach: 4200, engagement: 4.7 },
   { title: '5 Pasos para transformar tu vida', type: 'carousel', likes: 134, comments: 38, reach: 3800, engagement: 4.5 },
@@ -62,7 +63,7 @@ const mockTopPosts = [
   { title: 'Before & After: Mi journey', type: 'story', likes: 89, comments: 22, reach: 2100, engagement: 5.3 },
 ]
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Real Analytics Types ────────────────────────────────────────────────────
 
 interface RealAnalytics {
   current: {
@@ -106,48 +107,104 @@ interface RealAnalytics {
   }>
 }
 
-interface SmartInsightsProps {
-  igConnected?: boolean
-  realAnalytics?: RealAnalytics | null
-}
-
-export function SmartInsights({ igConnected = false, realAnalytics = null }: SmartInsightsProps) {
+export function SmartInsights() {
+  const [igConnected, setIgConnected] = useState(false)
+  const [igExpired, setIgExpired] = useState(false)
+  const [connectionLoading, setConnectionLoading] = useState(true)
+  const [realAnalytics, setRealAnalytics] = useState<RealAnalytics | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
   const [insightData, setInsightData] = useState<InsightData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [insightsLoading, setInsightsLoading] = useState(true)
 
-  useEffect(() => {
-    async function loadInsights() {
-      try {
-        const res = await fetch('/api/insights/recommendations')
-        if (res.ok) {
-          const data = await res.json()
-          setInsightData(data)
-        }
-      } catch (e) {
-        console.error('[Insights] Error:', e)
-      } finally {
-        setLoading(false)
+  // Check IG connection
+  const checkConnection = useCallback(async () => {
+    setConnectionLoading(true)
+    try {
+      const res = await fetch('/api/instagram/connection')
+      if (res.ok) {
+        const data = await res.json()
+        setIgConnected(data.connected === true)
+        setIgExpired(data.expired === true)
+      } else {
+        setIgConnected(false)
       }
+    } catch {
+      setIgConnected(false)
+    } finally {
+      setConnectionLoading(false)
     }
-    loadInsights()
   }, [])
 
-  // Derive data: use real analytics when connected, mock as fallback
-  const useRealData = igConnected && realAnalytics
+  // Load real analytics when connected
+  const loadAnalytics = useCallback(async () => {
+    if (!igConnected || igExpired) return
+    setAnalyticsLoading(true)
+    try {
+      const res = await fetch('/api/instagram/analytics')
+      if (res.ok) {
+        const data = await res.json()
+        setRealAnalytics(data)
+      } else {
+        toast.error('Error cargando analíticas de Instagram')
+      }
+    } catch {
+      toast.error('Error de conexión al cargar analíticas')
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }, [igConnected, igExpired])
 
-  // Engagement chart data
+  // Load AI insights
+  const loadInsights = useCallback(async () => {
+    setInsightsLoading(true)
+    try {
+      const res = await fetch('/api/insights/recommendations')
+      if (res.ok) {
+        const data = await res.json()
+        setInsightData(data)
+      }
+    } catch (e) {
+      console.error('[Insights] Error:', e)
+    } finally {
+      setInsightsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    checkConnection()
+    loadInsights()
+  }, [checkConnection, loadInsights])
+
+  useEffect(() => {
+    loadAnalytics()
+  }, [loadAnalytics])
+
+  // Refresh handler
+  const handleRefresh = async () => {
+    toast.promise(
+      Promise.all([checkConnection(), loadAnalytics(), loadInsights()]),
+      {
+        loading: 'Actualizando datos...',
+        success: 'Datos actualizados',
+        error: 'Error al actualizar',
+      }
+    )
+  }
+
+  // Derive data: use real analytics when connected, mock as fallback
+  const useRealData = igConnected && !igExpired && realAnalytics
+
   const engagementData = useRealData && realAnalytics!.timeseries.length > 0
     ? realAnalytics!.timeseries.map(t => ({
         date: new Date(t.date).toLocaleDateString('es-ES', { weekday: 'short' }),
         reach: t.reach,
-        likes: 0, // timeseries doesn't break down by type, reach is the main metric
+        likes: 0,
         comments: 0,
         shares: 0,
         saves: 0,
       }))
     : mockEngagementData
 
-  // Quick stats - use real data when available
   const quickStats = useRealData
     ? [
         {
@@ -163,7 +220,7 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
           label: 'Engagement rate',
           value: `${realAnalytics!.current.engagement_rate.toFixed(1)}%`,
           change: realAnalytics!.previous.engagement_rate > 0
-            ? `${realAnalytics!.current.engagement_rate >= realAnalytics!.previous.engagement_rate ? '+' : ''}${((realAnalytics!.current.engagement_rate - realAnalytics!.previous.engagement_rate)).toFixed(1)}%`
+            ? `${realAnalytics!.current.engagement_rate >= realAnalytics!.previous.engagement_rate ? '+' : ''}${(realAnalytics!.current.engagement_rate - realAnalytics!.previous.engagement_rate).toFixed(1)}%`
             : 'N/A',
           up: realAnalytics!.current.engagement_rate >= realAnalytics!.previous.engagement_rate,
           icon: Heart,
@@ -194,7 +251,6 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
         { label: 'Guardados', value: '141', change: '+32%', up: true, icon: Bookmark },
       ]
 
-  // Top posts - use real data when available
   const topPosts = useRealData && realAnalytics!.topPosts.length > 0
     ? realAnalytics!.topPosts.map(p => ({
         title: p.caption || 'Sin título',
@@ -211,6 +267,8 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
   const weeklyRec = insightData?.weeklyRecommendation ?? ''
   const postCount = insightData?.optimalPostCount ?? { min: 3, max: 5, current: 0 }
 
+  const showMockBanner = !igConnected || igExpired
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -224,13 +282,15 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
             Análisis inteligente con recomendaciones IA
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5">
-          <RefreshCw size={14} /> Actualizar
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={handleRefresh}>
+          <RefreshCw size={14} className={analyticsLoading ? 'animate-spin' : ''} /> Actualizar
         </Button>
       </div>
 
       {/* Instagram Connection Banner */}
-      {!igConnected && (
+      {connectionLoading ? (
+        <ConnectionCardSkeleton />
+      ) : showMockBanner ? (
         <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30">
           <CardContent className="p-4 flex items-center gap-3">
             <InstagramIcon size={20} className="text-yellow-600" />
@@ -243,45 +303,47 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
             </a>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* Health Score + Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {/* Health Score */}
-        <Card className="col-span-2 md:col-span-1">
-          <CardContent className="p-4 flex flex-col items-center justify-center">
-            <div className={cn(
-              'w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold border-4',
-              healthScore >= 75 ? 'border-green-500 text-green-600 bg-green-50' :
-              healthScore >= 50 ? 'border-yellow-500 text-yellow-600 bg-yellow-50' :
-              'border-red-500 text-red-600 bg-red-50'
-            )}>
-              {healthScore || '—'}
-            </div>
-            <p className="text-xs font-medium mt-2">Health Score</p>
-            <p className="text-[10px] text-muted-foreground">Salud del contenido</p>
-          </CardContent>
-        </Card>
-
-        {/* Quick Stats */}
-        {quickStats.map(({ label, value, change, up, icon: Icon }) => (
-          <Card key={label}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <Icon size={16} className="text-muted-foreground" />
-                <span className={cn('text-xs font-medium flex items-center gap-0.5', up ? 'text-green-600' : 'text-red-600')}>
-                  {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                  {change}
-                </span>
+      {analyticsLoading && igConnected ? (
+        <StatsRowSkeleton count={5} />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Card className="col-span-2 md:col-span-1">
+            <CardContent className="p-4 flex flex-col items-center justify-center">
+              <div className={cn(
+                'w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold border-4',
+                healthScore >= 75 ? 'border-green-500 text-green-600 bg-green-50' :
+                healthScore >= 50 ? 'border-yellow-500 text-yellow-600 bg-yellow-50' :
+                'border-red-500 text-red-600 bg-red-50'
+              )}>
+                {healthScore || '—'}
               </div>
-              <div className="mt-2">
-                <div className="text-xl font-bold">{value}</div>
-                <div className="text-xs text-muted-foreground">{label}</div>
-              </div>
+              <p className="text-xs font-medium mt-2">Health Score</p>
+              <p className="text-[10px] text-muted-foreground">Salud del contenido</p>
             </CardContent>
           </Card>
-        ))}
-      </div>
+
+          {quickStats.map(({ label, value, change, up, icon: Icon }) => (
+            <Card key={label}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <Icon size={16} className="text-muted-foreground" />
+                  <span className={cn('text-xs font-medium flex items-center gap-0.5', up ? 'text-green-600' : 'text-red-600')}>
+                    {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+                    {change}
+                  </span>
+                </div>
+                <div className="mt-2">
+                  <div className="text-xl font-bold">{value}</div>
+                  <div className="text-xs text-muted-foreground">{label}</div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Weekly Recommendation */}
       {weeklyRec && (
@@ -306,48 +368,18 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Engagement semanal</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <AreaChart data={engagementData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
-                    <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }} />
-                    <Area type="monotone" dataKey="reach" stroke="#8B5CF6" fill="#8B5CF6" fillOpacity={0.1} name="Alcance" />
-                    <Area type="monotone" dataKey="likes" stroke="#EC4899" fill="#EC4899" fillOpacity={0.1} name="Likes" />
-                    <Area type="monotone" dataKey="comments" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} name="Comments" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Distribución por tipo</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={[
-                    { type: 'Posts', engagement: 4.2, count: 12 },
-                    { type: 'Reels', engagement: 5.1, count: 8 },
-                    { type: 'Stories', engagement: 3.8, count: 15 },
-                    { type: 'Carousel', engagement: 4.7, count: 6 },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="type" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
-                    <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
-                    <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12 }} />
-                    <Bar dataKey="engagement" fill="#8B5CF6" radius={[4, 4, 0, 0]} name="Engagement %" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
+          {analyticsLoading && igConnected ? (
+            <div className="grid md:grid-cols-2 gap-4">
+              <ChartSkeleton />
+              <ChartSkeleton />
+            </div>
+          ) : (
+            <LazyRecharts
+              engagementData={engagementData}
+              pillarData={pillarData}
+              topPosts={topPosts}
+            />
+          )}
 
           {/* Posting Frequency */}
           <Card>
@@ -384,17 +416,12 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
                 <CardTitle className="text-sm">Distribución por Pilar</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie data={pillarData} cx="50%" cy="50%" outerRadius={100} dataKey="value" label={({ name, value }) => `${name}: ${value}%`}>
-                      {pillarData.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                <LazyRecharts
+                  engagementData={engagementData}
+                  pillarData={pillarData}
+                  topPosts={topPosts}
+                  showPieOnly
+                />
               </CardContent>
             </Card>
 
@@ -445,9 +472,11 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
 
         {/* AI Insights Tab */}
         <TabsContent value="ai" className="space-y-3">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <RefreshCw size={24} className="animate-spin text-muted-foreground" />
+          {insightsLoading ? (
+            <div className="grid gap-3">
+              {[1, 2, 3].map(i => (
+                <CardSkeleton key={i} className="h-24" />
+              ))}
             </div>
           ) : insights.length > 0 ? (
             insights.map((insight) => {
@@ -460,25 +489,27 @@ export function SmartInsights({ igConnected = false, realAnalytics = null }: Sma
               const config = typeConfig[insight.type] || typeConfig.action
 
               return (
-                <Card key={insight.id} className={cn('border', config.color)}>
-                  <CardContent className="p-4 flex items-start gap-3">
-                    {config.icon}
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-sm">{insight.title}</h4>
-                        {insight.metric !== undefined && (
-                          <Badge variant="outline" className="text-xs">{insight.metric} {insight.metricLabel}</Badge>
+                <FadeIn key={insight.id}>
+                  <Card className={cn('border', config.color)}>
+                    <CardContent className="p-4 flex items-start gap-3">
+                      {config.icon}
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-sm">{insight.title}</h4>
+                          {insight.metric !== undefined && (
+                            <Badge variant="outline" className="text-xs">{insight.metric} {insight.metricLabel}</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">{insight.description}</p>
+                        {insight.actionLabel && (
+                          <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs gap-1">
+                            {insight.actionLabel} <ArrowUpRight size={10} />
+                          </Button>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{insight.description}</p>
-                      {insight.actionLabel && (
-                        <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs gap-1">
-                          {insight.actionLabel} <ArrowUpRight size={10} />
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </FadeIn>
               )
             })
           ) : (

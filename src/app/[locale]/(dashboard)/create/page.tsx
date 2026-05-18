@@ -8,6 +8,12 @@ import { VideoStudio } from '@/components/video/video-studio'
 import { PenTool, Sparkles, Hash, Clock, Film } from 'lucide-react'
 import { PageTransition } from '@/components/ui/motion'
 import { transformProfile, transformMetaConnection, type ProfileRow, type MetaConnectionRow } from '@/lib/data/transforms'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Crear',
+  description: 'Crea contenido IA para Instagram — posts, reels, stories y más',
+}
 
 export default async function CreatePage({
   params,

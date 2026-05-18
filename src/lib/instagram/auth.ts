@@ -1,6 +1,7 @@
 'use server'
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { instagramCache } from './cache'
 
 const META_APP_ID = process.env.META_APP_ID!
 const META_APP_SECRET = process.env.META_APP_SECRET!
@@ -150,8 +151,21 @@ export async function saveInstagramConnection(
   }
 }
 
-/** Get user's Instagram connection status, auto-refresh token if nearing expiry */
+/** Get user's Instagram connection status, auto-refresh token if nearing expiry.
+ *  Uses cache to avoid redundant Supabase lookups. */
 export async function getInstagramConnection(userId: string) {
+  // Check cache first
+  const cacheKey = instagramCache.key(userId, 'auth-connection')
+  const cached = instagramCache.get<Record<string, unknown>>(cacheKey)
+  if (cached) {
+    // Still check expiry on cached data
+    const isExpired = new Date(cached.expires_at as string) < new Date()
+    if (isExpired) return { ...cached, isExpired: true }
+    const expiresAt = new Date(cached.expires_at as string)
+    const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    return { ...cached, isExpired: false, needsRefresh: expiresAt < sevenDaysFromNow }
+  }
+
   const supabase = await createServerSupabaseClient()
   const { data } = await supabase
     .from('meta_connections')
@@ -163,7 +177,11 @@ export async function getInstagramConnection(userId: string) {
 
   // Check if token is expired
   const isExpired = new Date(data.expires_at) < new Date()
-  if (isExpired) return { ...data, isExpired: true }
+  if (isExpired) {
+    // Cache even expired state briefly so we don't hammer Supabase
+    instagramCache.set(cacheKey, data, instagramCache.ttlFor('connection'))
+    return { ...data, isExpired: true }
+  }
 
   // Check if token needs refresh (within 7 days of expiry)
   const expiresAt = new Date(data.expires_at)
@@ -184,26 +202,42 @@ export async function getInstagramConnection(userId: string) {
         })
         .eq('user_id', userId)
 
-      return {
+      // Invalidate all caches since token changed
+      instagramCache.invalidateUser(userId)
+
+      const updated = {
         ...data,
         access_token: refreshed.accessToken,
         expires_at: newExpiresAt,
         isExpired: false,
         needsRefresh: false,
       }
+
+      // Cache the updated connection
+      instagramCache.set(cacheKey, updated, instagramCache.ttlFor('connection'))
+
+      return updated
     } catch (err) {
       console.error('Error auto-refreshing token:', err)
-      // Return connection anyway — will be flagged as expiring soon
+      // Cache and return connection anyway — will be flagged as expiring soon
+      instagramCache.set(cacheKey, data, instagramCache.ttlFor('connection'))
       return { ...data, isExpired: false, needsRefresh: true }
     }
   }
 
+  // Cache valid connections
+  instagramCache.set(cacheKey, data, instagramCache.ttlFor('connection'))
   return { ...data, isExpired: false, needsRefresh: !!needsRefresh }
 }
+
+
 
 /** Disconnect Instagram */
 export async function disconnectInstagram(userId: string) {
   const supabase = await createServerSupabaseClient()
   const { error } = await supabase.from('meta_connections').delete().eq('user_id', userId)
-  if (error) throw error
+  if (error) throw new Error('Error desconectando Instagram. Intenta de nuevo.')
+
+  // Invalidate all caches for this user
+  instagramCache.invalidateUser(userId)
 }

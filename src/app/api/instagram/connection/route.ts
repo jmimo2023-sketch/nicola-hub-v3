@@ -1,33 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getConnection } from '@/lib/instagram/client'
 
-/** Get current user's Instagram connection status (lightweight, no API calls) */
+/** Get current user's Instagram connection status */
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: conn } = await supabase
-      .from('meta_connections')
-      .select('ig_user_id, ig_username, ig_followers_count, ig_media_count, access_token, expires_at, token_type')
-      .eq('user_id', user.id)
-      .single()
+    const conn = await getConnection(user.id)
 
     if (!conn) return NextResponse.json({ connected: false })
 
-    const isExpired = new Date(conn.expires_at) < new Date()
-    if (isExpired) return NextResponse.json({ connected: true, expired: true, username: conn.ig_username })
+    if (conn.isExpired) {
+      return NextResponse.json({
+        connected: true,
+        expired: true,
+        username: conn.igUsername,
+      })
+    }
 
     return NextResponse.json({
       connected: true,
       expired: false,
-      igUserId: conn.ig_user_id,
-      username: conn.ig_username,
-      followersCount: conn.ig_followers_count,
-      mediaCount: conn.ig_media_count,
+      igUserId: conn.igUserId,
+      username: conn.igUsername,
+      followersCount: conn.igFollowersCount,
+      mediaCount: conn.igMediaCount,
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    // If token expired or not connected, return appropriate status
+    if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'NOT_CONNECTED') {
+      return NextResponse.json({ connected: false })
+    }
+    if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'TOKEN_EXPIRED') {
+      return NextResponse.json({ connected: true, expired: true })
+    }
+    const message = err instanceof Error ? err.message : 'Error desconocido'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
