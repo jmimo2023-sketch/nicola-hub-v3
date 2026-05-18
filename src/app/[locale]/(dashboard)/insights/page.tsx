@@ -14,11 +14,17 @@ export default async function InsightsPage() {
       const igConnection = await getInstagramConnection(user.id)
       if (igConnection && !igConnection.isExpired) {
         igConnected = true
-        const { getAccountAnalytics } = await import('@/lib/instagram/analytics')
-        igAnalytics = await getAccountAnalytics(user.id)
+        try {
+          const { getAccountAnalytics } = await import('@/lib/instagram/analytics')
+          igAnalytics = await getAccountAnalytics(user.id)
+        } catch (analyticsErr) {
+          console.error('Instagram analytics failed (non-fatal):', analyticsErr)
+          igAnalytics = null
+        }
       }
     } catch (e) {
-      console.error('Failed to fetch Instagram analytics:', e)
+      console.error('Failed to check Instagram connection:', e)
+      igConnected = false
     }
   }
 

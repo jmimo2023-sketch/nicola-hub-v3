@@ -36,11 +36,18 @@ export default async function HomePage() {
   try {
     igConnection = await getInstagramConnection(user.id)
     if (igConnection && !igConnection.isExpired) {
-      const { getAccountAnalytics } = await import('@/lib/instagram/analytics')
-      igAnalytics = await getAccountAnalytics(user.id)
+      try {
+        const { getAccountAnalytics } = await import('@/lib/instagram/analytics')
+        igAnalytics = await getAccountAnalytics(user.id)
+      } catch (analyticsErr) {
+        // Analytics can fail due to permissions or API limits — don't crash the page
+        console.error('Instagram analytics failed (non-fatal):', analyticsErr)
+        igAnalytics = null
+      }
     }
   } catch (e) {
-    console.error('Failed to fetch Instagram data:', e)
+    console.error('Failed to check Instagram connection:', e)
+    igConnection = null
   }
 
   const stats = {
