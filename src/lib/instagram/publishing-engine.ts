@@ -1,6 +1,7 @@
 // ============================================================================
 // NICOLA SCHAEFER HUB v3 — Instagram Publishing Engine
-// Handles single images, carousels, reels, and stories via Meta API v21.0
+// Handles single images, carousels, reels, and stories via Instagram Login API
+// Base URL: graph.instagram.com (NOT graph.facebook.com)
 // ============================================================================
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
@@ -21,8 +22,7 @@ interface CarouselItem {
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const META_API_VERSION = 'v21.0'
-const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`
+const META_GRAPH_URL = 'https://graph.instagram.com'
 
 // ── Publishing Functions ────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ export async function publishSingleImage(
 
     const createData = await createRes.json()
     if (!createData.id) {
-      return { success: false, error: `Failed to create container: ${JSON.stringify(createData)}` }
+      return { success: false, error: `Error creando contenedor: ${JSON.stringify(createData)}` }
     }
 
     const containerId = createData.id
@@ -58,7 +58,7 @@ export async function publishSingleImage(
     // Step 2: Wait for container to be ready (poll up to 30s)
     const mediaId = await waitForContainer(accessToken, containerId)
     if (!mediaId) {
-      return { success: false, error: 'Container processing timed out' }
+      return { success: false, error: 'Tiempo de espera agotado procesando el medio' }
     }
 
     // Step 3: Publish the media
@@ -73,7 +73,7 @@ export async function publishSingleImage(
 
     const publishData = await publishRes.json()
     if (!publishData.id) {
-      return { success: false, error: `Failed to publish: ${JSON.stringify(publishData)}` }
+      return { success: false, error: `Error publicando: ${JSON.stringify(publishData)}` }
     }
 
     return {
@@ -111,7 +111,7 @@ export async function publishCarousel(
       const data = await res.json()
 
       if (!data.id) {
-        return { success: false, error: `Failed to create carousel item: ${JSON.stringify(data)}` }
+        return { success: false, error: `Error creando item de carrusel: ${JSON.stringify(data)}` }
       }
 
       childrenIds.push(data.id)
@@ -121,7 +121,7 @@ export async function publishCarousel(
     for (const childId of childrenIds) {
       const ready = await waitForContainer(accessToken, childId)
       if (!ready) {
-        return { success: false, error: 'Carousel item processing timed out' }
+        return { success: false, error: 'Tiempo de espera agotado procesando item de carrusel' }
       }
     }
 
@@ -137,7 +137,7 @@ export async function publishCarousel(
     const carouselData = await carouselRes.json()
 
     if (!carouselData.id) {
-      return { success: false, error: `Failed to create carousel: ${JSON.stringify(carouselData)}` }
+      return { success: false, error: `Error creando carrusel: ${JSON.stringify(carouselData)}` }
     }
 
     // Step 4: Wait for carousel container
@@ -153,7 +153,7 @@ export async function publishCarousel(
     const publishData = await publishRes.json()
 
     if (!publishData.id) {
-      return { success: false, error: `Failed to publish carousel: ${JSON.stringify(publishData)}` }
+      return { success: false, error: `Error publicando carrusel: ${JSON.stringify(publishData)}` }
     }
 
     return {
@@ -194,13 +194,13 @@ export async function publishReel(
     const createData = await createRes.json()
 
     if (!createData.id) {
-      return { success: false, error: `Failed to create reel container: ${JSON.stringify(createData)}` }
+      return { success: false, error: `Error creando contenedor de reel: ${JSON.stringify(createData)}` }
     }
 
     // Wait for video processing (can take longer than images)
     const ready = await waitForContainer(accessToken, createData.id, 60)
     if (!ready) {
-      return { success: false, error: 'Reel processing timed out (video takes longer)' }
+      return { success: false, error: 'Tiempo de espera agotado procesando reel (el video toma más tiempo)' }
     }
 
     const publishParams = new URLSearchParams({
@@ -212,7 +212,7 @@ export async function publishReel(
     const publishData = await publishRes.json()
 
     if (!publishData.id) {
-      return { success: false, error: `Failed to publish reel: ${JSON.stringify(publishData)}` }
+      return { success: false, error: `Error publicando reel: ${JSON.stringify(publishData)}` }
     }
 
     return {
@@ -235,7 +235,7 @@ export async function publishStory(
 ): Promise<PublishResult> {
   try {
     const params = new URLSearchParams({
-      media_type: 'STORY',
+      media_type: 'STORIES',
       image_url: imageUrl,
       access_token: accessToken,
     })
@@ -244,7 +244,7 @@ export async function publishStory(
     const createData = await createRes.json()
 
     if (!createData.id) {
-      return { success: false, error: `Failed to create story container: ${JSON.stringify(createData)}` }
+      return { success: false, error: `Error creando contenedor de story: ${JSON.stringify(createData)}` }
     }
 
     await waitForContainer(accessToken, createData.id)
@@ -258,7 +258,7 @@ export async function publishStory(
     const publishData = await publishRes.json()
 
     if (!publishData.id) {
-      return { success: false, error: `Failed to publish story: ${JSON.stringify(publishData)}` }
+      return { success: false, error: `Error publicando story: ${JSON.stringify(publishData)}` }
     }
 
     return {
@@ -273,7 +273,7 @@ export async function publishStory(
 // ── Cron Publisher ───────────────────────────────────────────────────────────
 
 /**
- * Process the publishing queue — called by Vercel Cron every 5 minutes
+ * Process the publishing queue — called by Vercel Cron
  */
 export async function processPublishingQueue(): Promise<{ processed: number; failed: number }> {
   const supabase = await createServerSupabaseClient()
@@ -313,7 +313,7 @@ export async function processPublishingQueue(): Promise<{ processed: number; fai
     if (!metaConnection || !metaConnection.ig_user_id || !metaConnection.access_token) {
       await supabase
         .from('publishing_queue')
-        .update({ status: 'failed', failure_reason: 'No Instagram connection found' })
+        .update({ status: 'failed', failure_reason: 'No se encontró conexión de Instagram' })
         .eq('id', item.id)
       failed++
       continue
@@ -323,14 +323,13 @@ export async function processPublishingQueue(): Promise<{ processed: number; fai
     if (!contentItem) {
       await supabase
         .from('publishing_queue')
-        .update({ status: 'failed', failure_reason: 'Content item not found' })
+        .update({ status: 'failed', failure_reason: 'Contenido no encontrado' })
         .eq('id', item.id)
       failed++
       continue
     }
 
     // For now, just mark as published (actual Instagram API calls require real media URLs)
-    // In production, this would call the appropriate publish function
     await supabase.from('publishing_queue').update({
       status: 'published',
       published_at: new Date().toISOString(),

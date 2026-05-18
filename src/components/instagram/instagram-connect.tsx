@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Check, AlertCircle, RefreshCw, Trash2, ExternalLink } from 'lucide-react'
+import { Check, AlertCircle, RefreshCw, Trash2, ExternalLink, Clock } from 'lucide-react'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
 import { FadeIn } from '@/components/ui/motion'
 
@@ -13,12 +13,16 @@ interface MetaConnection {
   ig_followers_count: number
   ig_media_count: number
   isExpired: boolean
+  needsRefresh?: boolean
+  expires_at: string
+  token_refreshed_at?: string
 }
 
 export function InstagramConnect({ userId }: { userId: string }) {
   const [connection, setConnection] = useState<MetaConnection | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -35,7 +39,7 @@ export function InstagramConnect({ userId }: { userId: string }) {
       checkConnection()
     }
     if (params.get('ig_error')) {
-      setError(params.get('ig_error'))
+      setError(decodeURIComponent(params.get('ig_error') || 'Error desconocido'))
     }
   }, [])
 
@@ -51,7 +55,10 @@ export function InstagramConnect({ userId }: { userId: string }) {
 
       if (data) {
         const isExpired = new Date(data.expires_at) < new Date()
-        setConnection({ ...data, isExpired })
+        const expiresAt = new Date(data.expires_at)
+        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        const needsRefresh = !isExpired && expiresAt < sevenDaysFromNow
+        setConnection({ ...data, isExpired, needsRefresh })
       }
     } catch {}
     setLoading(false)
@@ -71,7 +78,7 @@ export function InstagramConnect({ userId }: { userId: string }) {
       if (data.url) {
         window.location.href = data.url
       } else {
-        setError(data.error || 'Error generating auth URL')
+        setError(data.error || 'Error generando URL de autenticación')
       }
     } catch (err: any) {
       setError(err.message)
@@ -79,8 +86,24 @@ export function InstagramConnect({ userId }: { userId: string }) {
     setConnecting(false)
   }
 
+  async function handleRefreshToken() {
+    setRefreshing(true)
+    try {
+      const res = await fetch('/api/instagram/refresh-token', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        await checkConnection()
+      } else {
+        setError(data.error || 'Error renovando token')
+      }
+    } catch (err: any) {
+      setError(err.message)
+    }
+    setRefreshing(false)
+  }
+
   async function handleDisconnect() {
-    if (!confirm('¿Desconectar cuenta de Instagram?')) return
+    if (!confirm('¿Desconectar cuenta de Instagram? Perderás acceso a publicar y ver analytics.')) return
     try {
       const supabase = createClient()
       await supabase.from('meta_connections').delete().eq('user_id', userId)
@@ -89,6 +112,12 @@ export function InstagramConnect({ userId }: { userId: string }) {
     } catch (err: any) {
       setError(err.message)
     }
+  }
+
+  /** Format remaining days until token expiry */
+  function getDaysUntilExpiry(expiresAt: string): number {
+    const diff = new Date(expiresAt).getTime() - Date.now()
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
   }
 
   if (loading) {
@@ -100,7 +129,11 @@ export function InstagramConnect({ userId }: { userId: string }) {
     )
   }
 
+  // Connected and token valid
   if (connection && !connection.isExpired) {
+    const daysLeft = getDaysUntilExpiry(connection.expires_at)
+    const showRefreshWarning = connection.needsRefresh || daysLeft <= 14
+
     return (
       <FadeIn>
         <div className="space-y-3">
@@ -114,7 +147,7 @@ export function InstagramConnect({ userId }: { userId: string }) {
                 <Check size={16} className="text-green-500" />
               </div>
               <span className="text-xs text-muted-foreground">
-                {connection.ig_followers_count.toLocaleString()} seguidores · {connection.ig_media_count} publicaciones
+                {connection.ig_followers_count?.toLocaleString() || 0} seguidores · {connection.ig_media_count || 0} publicaciones
               </span>
             </div>
             <a
@@ -126,6 +159,25 @@ export function InstagramConnect({ userId }: { userId: string }) {
               <ExternalLink size={16} className="text-muted-foreground" />
             </a>
           </div>
+
+          {/* Token refresh warning */}
+          {showRefreshWarning && (
+            <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <Clock size={14} className="text-amber-500 shrink-0" />
+              <span className="text-xs text-amber-600 flex-1">
+                Token expira en {daysLeft} días. Renueva para mantener el acceso.
+              </span>
+              <button
+                onClick={handleRefreshToken}
+                disabled={refreshing}
+                className="text-xs text-amber-700 hover:text-amber-900 font-medium flex items-center gap-1"
+              >
+                <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                {refreshing ? 'Renovando...' : 'Renovar'}
+              </button>
+            </div>
+          )}
+
           <button
             onClick={handleDisconnect}
             className="text-xs text-destructive hover:underline flex items-center gap-1"
@@ -138,6 +190,7 @@ export function InstagramConnect({ userId }: { userId: string }) {
     )
   }
 
+  // Token expired
   if (connection?.isExpired) {
     return (
       <div className="space-y-3">
@@ -160,6 +213,7 @@ export function InstagramConnect({ userId }: { userId: string }) {
     )
   }
 
+  // Not connected
   return (
     <FadeIn>
       <div className="space-y-3">
@@ -194,7 +248,15 @@ export function InstagramConnect({ userId }: { userId: string }) {
             {connecting ? 'Conectando...' : 'Conectar con Instagram'}
           </button>
           <p className="text-xs text-muted-foreground">
-            Necesitas una cuenta de Instagram Business. <a href="https://help.instagram.com/502981923235522" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Más info</a>
+            Necesitas una cuenta de Instagram Business o Creator.{' '}
+            <a
+              href="https://help.instagram.com/502981923235522"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              Más info
+            </a>
           </p>
         </div>
       </div>

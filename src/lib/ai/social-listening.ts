@@ -4,8 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const META_API_VERSION = 'v21.0'
-const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`
+const META_BASE = 'https://graph.instagram.com'
 
 // ============================================================
 // SOCIAL LISTENING — Monitor mentions and brand keywords

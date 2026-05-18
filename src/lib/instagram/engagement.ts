@@ -1,20 +1,15 @@
 'use server'
 
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getInstagramConnection } from './auth'
 
-const META_API_VERSION = 'v21.0'
-const META_BASE = `https://graph.facebook.com/${META_API_VERSION}`
+const META_BASE = 'https://graph.instagram.com'
 
-/** Get Page access token and IG user ID */
-async function getIgtokens(userId: string) {
-  const supabase = await createServerSupabaseClient()
-  const { data: conn } = await supabase
-    .from('meta_connections')
-    .select('access_token, ig_user_id')
-    .eq('user_id', userId)
-    .single()
-
+/** Get access token and IG user ID */
+async function getIgTokens(userId: string) {
+  const conn = await getInstagramConnection(userId)
   if (!conn) throw new Error('Instagram no conectado')
+  if (conn.isExpired) throw new Error('Token de Instagram expirado. Reconecta tu cuenta.')
   if (!conn.access_token) throw new Error('Token no disponible')
 
   return { pageToken: conn.access_token, igUserId: conn.ig_user_id }
@@ -26,21 +21,21 @@ async function getIgtokens(userId: string) {
 
 /** Fetch recent comments on user's media */
 export async function getInstagramComments(userId: string, limit = 50) {
-  const { pageToken, igUserId } = await getIgtokens(userId)
+  const { pageToken, igUserId } = await getIgTokens(userId)
 
   // First get user's recent media
   const mediaRes = await fetch(
     `${META_BASE}/${igUserId}/media?fields=id,caption,media_type,media_url,permalink,timestamp&limit=${limit}&access_token=${pageToken}`
   )
   const mediaData = await mediaRes.json()
-  if (mediaData.error) throw new Error(mediaData.error.message)
+  if (mediaData.error) throw new Error(mediaData.error.message || 'Error obteniendo medios')
 
   // For each media, get comments
   const allComments: any[] = []
 
   for (const media of (mediaData.data || []).slice(0, 10)) {
     const commentsRes = await fetch(
-      `${META_BASE}/${media.id}/comments?fields=id,text,from,timestamp,like_count,replies&access_token=${pageToken}`
+      `${META_BASE}/${media.id}/comments?fields=id,text,from,timestamp,like_count&access_token=${pageToken}`
     )
     const commentsData = await commentsRes.json()
     if (commentsData.data) {
@@ -67,7 +62,7 @@ export async function getInstagramComments(userId: string, limit = 50) {
 
 /** Reply to a comment */
 export async function replyToComment(userId: string, commentId: string, message: string) {
-  const { pageToken } = await getIgtokens(userId)
+  const { pageToken } = await getIgTokens(userId)
 
   const res = await fetch(`${META_BASE}/${commentId}/replies`, {
     method: 'POST',
@@ -78,13 +73,13 @@ export async function replyToComment(userId: string, commentId: string, message:
     }),
   })
   const data = await res.json()
-  if (data.error) throw new Error(data.error.message)
+  if (data.error) throw new Error(data.error.message || 'Error respondiendo al comentario')
   return data
 }
 
 /** Hide a comment */
 export async function hideComment(userId: string, commentId: string) {
-  const { pageToken } = await getIgtokens(userId)
+  const { pageToken } = await getIgTokens(userId)
 
   const res = await fetch(`${META_BASE}/${commentId}`, {
     method: 'POST',
@@ -95,89 +90,44 @@ export async function hideComment(userId: string, commentId: string) {
     }),
   })
   const data = await res.json()
-  if (data.error) throw new Error(data.error.message)
+  if (data.error) throw new Error(data.error.message || 'Error ocultando comentario')
   return data
 }
 
 /** Delete a comment */
 export async function deleteComment(userId: string, commentId: string) {
-  const { pageToken } = await getIgtokens(userId)
+  const { pageToken } = await getIgTokens(userId)
 
   const res = await fetch(`${META_BASE}/${commentId}?access_token=${pageToken}`, {
     method: 'DELETE',
   })
   const data = await res.json()
-  if (data.error) throw new Error(data.error.message)
+  if (data.error) throw new Error(data.error.message || 'Error eliminando comentario')
   return data
 }
 
 // ============================================================
-// DMs (Conversations via Messenger API)
+// DMs — Limited availability with Instagram Login API
 // ============================================================
 
-/** Fetch Instagram DM conversations */
-export async function getInstagramDMs(userId: string, limit = 25) {
-  const { pageToken, igUserId } = await getIgtokens(userId)
-
-  // Get conversations
-  const convRes = await fetch(
-    `${META_BASE}/${igUserId}/conversations?fields=id,participants,snippet,updated_time,message_count,unread_count&limit=${limit}&access_token=${pageToken}`
-  )
-  const convData = await convRes.json()
-  if (convData.error) throw new Error(convData.error.message)
-
-  const conversations = []
-
-  for (const conv of convData.data || []) {
-    // Get messages in this conversation
-    const msgRes = await fetch(
-      `${META_BASE}/${conv.id}/messages?fields=id,message,from,created_time,attachments&limit=20&access_token=${pageToken}`
-    )
-    const msgData = await msgRes.json()
-
-    conversations.push({
-      id: conv.id,
-      participants: conv.participants?.data || [],
-      snippet: conv.snippet,
-      updated_time: conv.updated_time,
-      message_count: conv.message_count,
-      unread_count: conv.unread_count,
-      messages: (msgData.data || []).map((m: any) => ({
-        id: m.id,
-        text: m.message,
-        from: m.from,
-        created_time: m.created_time,
-        attachments: m.attachments?.data || [],
-      })),
-      type: 'dm',
-    })
-  }
-
-  // Sort by updated_time desc
-  conversations.sort((a, b) => new Date(b.updated_time).getTime() - new Date(a.updated_time).getTime())
-  return conversations
+/** Fetch Instagram DM conversations — NOT FULLY AVAILABLE with Instagram Login */
+export async function getInstagramDMs(userId: string, _limit = 25) {
+  // Instagram Login API does not support DM reading via the same endpoint as Facebook Login
+  // DMs require instagram_business_manage_messages permission + different endpoint
+  // For now, return empty array until we implement the proper DM flow
+  console.warn('getInstagramDMs: DM functionality requires additional setup with Instagram Login API')
+  return []
 }
 
-/** Send a DM */
-export async function sendInstagramDM(userId: string, recipientId: string, message: string) {
-  const { pageToken } = await getIgtokens(userId)
-
-  const res = await fetch(`${META_BASE}/me/messages`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      recipient: { id: recipientId },
-      message: { text: message },
-      access_token: pageToken,
-    }),
-  })
-  const data = await res.json()
-  if (data.error) throw new Error(data.error.message)
-  return data
+/** Send a DM — NOT FULLY AVAILABLE with Instagram Login */
+export async function sendInstagramDM(_userId: string, _recipientId: string, _message: string) {
+  // Instagram Login API DMs use a different flow than Facebook Login
+  // Requires instagram_business_manage_messages scope and conversation-based messaging
+  throw new Error('Envío de DMs no disponible aún con Instagram Login. Se implementará en una futura actualización.')
 }
 
 // ============================================================
-// SMART REPLIES (AI-generated)
+// SMART REPLIES (AI-generated) — No Meta API changes needed
 // ============================================================
 
 export async function generateSmartReply(
@@ -233,7 +183,7 @@ Formato: solo las 3 respuestas numeradas, sin explicación.`
 }
 
 // ============================================================
-// SAVED REPLY TEMPLATES
+// SAVED REPLY TEMPLATES — No Meta API changes needed
 // ============================================================
 
 const supabaseTables = {

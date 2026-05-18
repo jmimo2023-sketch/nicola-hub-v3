@@ -6,20 +6,18 @@ const META_APP_ID = process.env.META_APP_ID!
 const META_APP_SECRET = process.env.META_APP_SECRET!
 const REDIRECT_URI = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://nicola-hub-v3.vercel.app'}/api/instagram/callback`
 
-/** Step 1: Generate OAuth URL for Instagram */
+/** Step 1: Generate OAuth URL for Instagram Login (not Facebook) */
 export async function getInstagramAuthUrl(userId: string) {
   const scopes = [
-    'instagram_basic',
-    'instagram_content_publish',
-    'instagram_manage_comments',
-    'instagram_manage_insights',
-    'pages_read_engagement',
-    'pages_manage_posts',
+    'instagram_business_basic',
+    'instagram_business_content_publish',
+    'instagram_business_manage_comments',
+    'instagram_business_manage_insights',
   ].join(',')
 
   const state = Buffer.from(JSON.stringify({ userId, ts: Date.now() })).toString('base64url')
 
-  const url = new URL('https://www.facebook.com/v21.0/dialog/oauth')
+  const url = new URL('https://www.instagram.com/oauth/authorize')
   url.searchParams.set('client_id', META_APP_ID)
   url.searchParams.set('redirect_uri', REDIRECT_URI)
   url.searchParams.set('scope', scopes)
@@ -29,87 +27,116 @@ export async function getInstagramAuthUrl(userId: string) {
   return url.toString()
 }
 
-/** Step 2: Exchange code for short-lived token, then long-lived token */
+/** Step 2: Exchange authorization code for short-lived token (1 hour) */
 export async function exchangeCodeForToken(code: string) {
-  // Short-lived token
-  const shortRes = await fetch(
-    `https://graph.facebook.com/v21.0/oauth/access_token?client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&redirect_uri=${REDIRECT_URI}&code=${code}`
-  )
-  const shortData = await shortRes.json()
-  if (shortData.error) throw new Error(shortData.error.message)
+  const res = await fetch('https://api.instagram.com/oauth/access_token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: META_APP_ID,
+      client_secret: META_APP_SECRET,
+      grant_type: 'authorization_code',
+      redirect_uri: REDIRECT_URI,
+      code,
+    }),
+  })
 
-  // Long-lived token
-  const longRes = await fetch(
-    `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${META_APP_ID}&client_secret=${META_APP_SECRET}&fb_exchange_token=${shortData.access_token}`
-  )
-  const longData = await longRes.json()
-  if (longData.error) throw new Error(longData.error.message)
+  const data = await res.json()
+  if (data.error) {
+    throw new Error(data.error_message || data.error?.message || 'Error intercambiando código por token')
+  }
 
   return {
-    accessToken: longData.access_token as string,
-    expiresIn: longData.expires_in as number, // seconds
-    tokenType: longData.token_type as string,
+    accessToken: data.access_token as string,
+    userId: data.user_id as number,
   }
 }
 
-/** Step 3: Get user's Facebook Pages (needed for IG) */
-export async function getUserPages(accessToken: string) {
+/** Step 3: Exchange short-lived token for long-lived token (60 days) */
+export async function exchangeLongLivedToken(shortLivedToken: string) {
   const res = await fetch(
-    `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,followers_count,media_count}&access_token=${accessToken}`
+    `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${META_APP_SECRET}&access_token=${shortLivedToken}`
   )
+
   const data = await res.json()
-  if (data.error) throw new Error(data.error.message)
-  return data.data as Array<{
-    id: string
-    name: string
-    access_token: string
-    instagram_business_account?: {
-      id: string
-      username: string
-      followers_count: number
-      media_count: number
-    }
-  }>
+  if (data.error) {
+    throw new Error(data.error_message || 'Error obteniendo token de larga duración')
+  }
+
+  return {
+    accessToken: data.access_token as string,
+    tokenType: data.token_type as string,
+    expiresIn: data.expires_in as number, // seconds until expiry (typically 5184000 = 60 days)
+  }
 }
 
-/** Step 4: Save connection to Supabase */
+/** Step 4: Refresh a long-lived token before it expires */
+export async function refreshLongLivedToken(longLivedToken: string) {
+  const res = await fetch(
+    `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${longLivedToken}`
+  )
+
+  const data = await res.json()
+  if (data.error) {
+    throw new Error(data.error_message || 'Error renovando token')
+  }
+
+  return {
+    accessToken: data.access_token as string,
+    tokenType: data.token_type as string,
+    expiresIn: data.expires_in as number,
+  }
+}
+
+/** Step 5: Get Instagram user profile */
+export async function getInstagramUserProfile(accessToken: string) {
+  const res = await fetch(
+    `https://graph.instagram.com/me?fields=id,username,account_type,media_count,followers_count&access_token=${accessToken}`
+  )
+
+  const data = await res.json()
+  if (data.error) {
+    throw new Error(data.error_message || 'Error obteniendo perfil de Instagram')
+  }
+
+  return {
+    igUserId: String(data.id),
+    username: data.username as string,
+    accountType: data.account_type as string,
+    mediaCount: data.media_count as number,
+    followersCount: data.followers_count as number,
+  }
+}
+
+/** Save Instagram connection to Supabase */
 export async function saveInstagramConnection(
   userId: string,
   accessToken: string,
   expiresIn: number,
-  pages: Array<{
-    id: string
-    name: string
-    access_token: string
-    instagram_business_account?: {
-      id: string
-      username: string
-      followers_count: number
-      media_count: number
-    }
-  }>
+  profile: {
+    igUserId: string
+    username: string
+    accountType: string
+    mediaCount: number
+    followersCount: number
+  }
 ) {
   const supabase = await createServerSupabaseClient()
-
-  // Find first page with IG business account
-  const igPage = pages.find((p) => p.instagram_business_account)
-  if (!igPage?.instagram_business_account) {
-    throw new Error('No se encontró una cuenta de Instagram Business conectada a tus páginas de Facebook')
-  }
 
   const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
 
   const { error } = await supabase.from('meta_connections').upsert(
     {
       user_id: userId,
-      access_token: igPage.access_token, // Page token (long-lived)
+      access_token: accessToken,
       expires_at: expiresAt,
-      scope: 'instagram_basic,instagram_content_publish,instagram_manage_comments,instagram_manage_insights,pages_read_engagement,pages_manage_posts',
-      ig_user_id: igPage.instagram_business_account.id,
-      ig_username: igPage.instagram_business_account.username,
-      ig_followers_count: igPage.instagram_business_account.followers_count,
-      ig_media_count: igPage.instagram_business_account.media_count,
-      pages: pages.map((p) => ({ id: p.id, name: p.name })),
+      scope: 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_insights',
+      ig_user_id: profile.igUserId,
+      ig_username: profile.username,
+      ig_followers_count: profile.followersCount,
+      ig_media_count: profile.mediaCount,
+      token_type: 'instagram_login',
+      token_refreshed_at: new Date().toISOString(),
     },
     { onConflict: 'user_id' }
   )
@@ -117,13 +144,13 @@ export async function saveInstagramConnection(
   if (error) throw error
 
   return {
-    igUsername: igPage.instagram_business_account.username,
-    igUserId: igPage.instagram_business_account.id,
-    followers: igPage.instagram_business_account.followers_count,
+    igUsername: profile.username,
+    igUserId: profile.igUserId,
+    followers: profile.followersCount,
   }
 }
 
-/** Get user's Instagram connection status */
+/** Get user's Instagram connection status, auto-refresh token if nearing expiry */
 export async function getInstagramConnection(userId: string) {
   const supabase = await createServerSupabaseClient()
   const { data } = await supabase
@@ -138,7 +165,40 @@ export async function getInstagramConnection(userId: string) {
   const isExpired = new Date(data.expires_at) < new Date()
   if (isExpired) return { ...data, isExpired: true }
 
-  return { ...data, isExpired: false }
+  // Check if token needs refresh (within 7 days of expiry)
+  const expiresAt = new Date(data.expires_at)
+  const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  const needsRefresh = expiresAt < sevenDaysFromNow
+
+  if (needsRefresh && data.access_token) {
+    try {
+      const refreshed = await refreshLongLivedToken(data.access_token)
+      const newExpiresAt = new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+
+      await supabase
+        .from('meta_connections')
+        .update({
+          access_token: refreshed.accessToken,
+          expires_at: newExpiresAt,
+          token_refreshed_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+
+      return {
+        ...data,
+        access_token: refreshed.accessToken,
+        expires_at: newExpiresAt,
+        isExpired: false,
+        needsRefresh: false,
+      }
+    } catch (err) {
+      console.error('Error auto-refreshing token:', err)
+      // Return connection anyway — will be flagged as expiring soon
+      return { ...data, isExpired: false, needsRefresh: true }
+    }
+  }
+
+  return { ...data, isExpired: false, needsRefresh: !!needsRefresh }
 }
 
 /** Disconnect Instagram */
