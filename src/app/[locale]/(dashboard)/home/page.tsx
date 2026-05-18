@@ -1,6 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { HomeDashboard } from '@/components/home/home-dashboard'
-import { getInstagramConnection } from '@/lib/instagram/auth'
 
 export default async function HomePage() {
   const supabase = await createServerSupabaseClient()
@@ -30,24 +29,27 @@ export default async function HomePage() {
     .eq('user_id', user.id)
     .single()
 
-  // Check Instagram connection and fetch real analytics
+  // Get Instagram connection status (lightweight — no API calls)
   let igConnection = null
-  let igAnalytics = null
   try {
-    igConnection = await getInstagramConnection(user.id)
-    if (igConnection && !igConnection.isExpired) {
-      try {
-        const { getAccountAnalytics } = await import('@/lib/instagram/analytics')
-        igAnalytics = await getAccountAnalytics(user.id)
-      } catch (analyticsErr) {
-        // Analytics can fail due to permissions or API limits — don't crash the page
-        console.error('Instagram analytics failed (non-fatal):', analyticsErr)
-        igAnalytics = null
+    const { data: conn } = await supabase
+      .from('meta_connections')
+      .select('ig_user_id, ig_username, ig_followers_count, ig_media_count, expires_at')
+      .eq('user_id', user.id)
+      .single()
+
+    if (conn) {
+      const isExpired = new Date(conn.expires_at) < new Date()
+      igConnection = {
+        ig_user_id: conn.ig_user_id,
+        ig_username: conn.ig_username,
+        ig_followers_count: conn.ig_followers_count,
+        ig_media_count: conn.ig_media_count,
+        isExpired,
       }
     }
   } catch (e) {
-    console.error('Failed to check Instagram connection:', e)
-    igConnection = null
+    // No connection — that's fine
   }
 
   const stats = {
@@ -70,7 +72,6 @@ export default async function HomePage() {
       analytics={analytics || []}
       profile={profile}
       igConnection={igConnection}
-      igAnalytics={igAnalytics}
     />
   )
 }

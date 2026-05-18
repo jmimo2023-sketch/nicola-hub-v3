@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { FadeIn } from '@/components/ui/motion'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
+import { createClient } from '@/lib/supabase/client'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -177,12 +178,33 @@ interface ContentCalendarProps {
   igConnected?: boolean
 }
 
-export function ContentCalendar({ igConnected = false }: ContentCalendarProps) {
+export function ContentCalendar() {
   const t = useTranslations()
+  const [igConnected, setIgConnected] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<'month' | 'week' | 'list'>('month')
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const content = useMemo(() => getMockContent(), [])
+
+  // Check IG connection client-side (non-blocking)
+  useEffect(() => {
+    async function checkConnection() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data: conn } = await supabase
+          .from('meta_connections')
+          .select('expires_at')
+          .eq('user_id', user.id)
+          .single()
+        if (conn && new Date(conn.expires_at) > new Date()) {
+          setIgConnected(true)
+        }
+      } catch {}
+    }
+    checkConnection()
+  }, [])
 
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()

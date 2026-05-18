@@ -9,7 +9,7 @@ import { FadeIn } from '@/components/ui/motion'
 import {
   Sparkles, Calendar, TrendingUp, AlertCircle, CheckCircle2,
   Lightbulb, ArrowRight, BarChart3, FileText, Clock, Target,
-  Users, ImageIcon, ExternalLink
+  Users, ImageIcon, ExternalLink, RefreshCw
 } from 'lucide-react'
 import { InstagramIcon } from '@/components/ui/instagram-icon'
 import type { AdvisorInsight } from '@/lib/ai/advisor-engine'
@@ -19,47 +19,7 @@ interface IgConnection {
   ig_username?: string
   ig_followers_count?: number
   ig_media_count?: number
-  access_token?: string
   isExpired?: boolean
-  needsRefresh?: boolean
-}
-
-interface IgAnalytics {
-  current: {
-    accounts_engaged: number
-    reach: number
-    likes: number
-    comments: number
-    shares: number
-    saves: number
-    followers: number
-    engagement_rate: number
-  }
-  previous: {
-    accounts_engaged: number
-    reach: number
-    likes: number
-    comments: number
-    shares: number
-    saves: number
-    followers: number
-    engagement_rate: number
-  }
-  timeseries: Array<{ date: string; reach: number; followers: number; engagement_rate: number }>
-  topPosts: Array<{
-    id: string
-    caption: string
-    media_type: string
-    media_url: string
-    permalink: string
-    timestamp: string
-    like_count: number
-    comments_count: number
-    reach: number
-    engagement_rate: number
-    saves: number
-    shares: number
-  }>
 }
 
 interface HomeDashboardProps {
@@ -74,14 +34,15 @@ interface HomeDashboardProps {
   analytics: any[]
   profile: any
   igConnection: IgConnection | null
-  igAnalytics: IgAnalytics | null
 }
 
-export function HomeDashboard({ stats, contentItems, analytics, profile, igConnection, igAnalytics }: HomeDashboardProps) {
+export function HomeDashboard({ stats, contentItems, analytics, profile, igConnection }: HomeDashboardProps) {
   const [insights, setInsights] = useState<AdvisorInsight[]>([])
   const [healthScore, setHealthScore] = useState<number | null>(null)
   const [weeklyRec, setWeeklyRec] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [igEngagement, setIgEngagement] = useState<number | null>(null)
+  const [igEngagementLoading, setIgEngagementLoading] = useState(false)
 
   useEffect(() => {
     async function loadInsights() {
@@ -101,6 +62,20 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
     }
     loadInsights()
   }, [])
+
+  // Load real engagement rate separately (non-blocking)
+  useEffect(() => {
+    if (igConnection && !igConnection.isExpired) {
+      setIgEngagementLoading(true)
+      fetch('/api/instagram/analytics')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data?.current) setIgEngagement(data.current.engagement_rate)
+        })
+        .catch(() => {})
+        .finally(() => setIgEngagementLoading(false))
+    }
+  }, [igConnection])
 
   const insightIcon = (type: string) => {
     switch (type) {
@@ -144,8 +119,6 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
                       <span className="font-semibold text-sm">@{igConnection.ig_username || 'instagram'}</span>
                       {igConnection.isExpired ? (
                         <Badge variant="outline" className="text-red-600 border-red-300 text-[10px]">Token expirado</Badge>
-                      ) : igConnection.needsRefresh ? (
-                        <Badge variant="outline" className="text-yellow-600 border-yellow-300 text-[10px]">Token por expirar</Badge>
                       ) : (
                         <Badge variant="outline" className="text-green-600 border-green-300 text-[10px]">Conectado</Badge>
                       )}
@@ -153,9 +126,11 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
                     <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                       <span className="flex items-center gap-1"><Users size={12} /> {(igConnection.ig_followers_count || 0).toLocaleString()} seguidores</span>
                       <span className="flex items-center gap-1"><ImageIcon size={12} /> {igConnection.ig_media_count || 0} publicaciones</span>
-                      {igAnalytics && (
-                        <span className="flex items-center gap-1"><TrendingUp size={12} /> {igAnalytics.current.engagement_rate.toFixed(1)}% engagement</span>
-                      )}
+                      {igEngagementLoading ? (
+                        <RefreshCw size={12} className="animate-spin" />
+                      ) : igEngagement !== null ? (
+                        <span className="flex items-center gap-1"><TrendingUp size={12} /> {igEngagement.toFixed(1)}% engagement</span>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -176,7 +151,7 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
                 </div>
                 <div className="flex-1">
                   <span className="font-semibold text-sm">Conecta tu Instagram</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">Vé tus estadísticas reales, comentarios y programa publicaciones</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Ve tus estadísticas reales, comentarios y programa publicaciones</p>
                 </div>
                 <a href="/settings">
                   <Button size="sm" className="gap-1">
@@ -201,11 +176,7 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
         </div>
 
         {healthScore !== null && (
-          <FadeIn
-            
-            
-            className="flex items-center gap-3"
-          >
+          <FadeIn className="flex items-center gap-3">
             <div className="text-center">
               <div className={cn(
                 'w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold border-4',
@@ -243,7 +214,7 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
 
       {/* Weekly Recommendation */}
       {weeklyRec && (
-        <FadeIn   delay={0.1}>
+        <FadeIn delay={0.1}>
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="p-4 flex items-start gap-3">
               <Sparkles size={20} className="text-primary shrink-0 mt-0.5" />
@@ -271,13 +242,8 @@ export function HomeDashboard({ stats, contentItems, analytics, profile, igConne
           </div>
         ) : insights.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2">
-            {insights.map((insight, i) => (
-              <FadeIn
-                key={insight.id}
-                
-                
-                
-              >
+            {insights.map((insight) => (
+              <FadeIn key={insight.id}>
                 <Card className={cn('border', insightBg(insight.type))}>
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
